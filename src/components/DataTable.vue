@@ -6,6 +6,7 @@ const props = defineProps<{
   columns: Column[]
   rows: Record<string, unknown>[]
   initialFilters?: Record<string, string>
+  hideControls?: boolean // for small inline tables (search/filters not needed)
 }>()
 
 const search = ref('')
@@ -84,7 +85,7 @@ function cell(c: Column, v: unknown): string {
 
 <template>
   <div class="dt">
-    <div class="dt-controls">
+    <div v-if="!hideControls" class="dt-controls">
       <input
         v-model="search"
         class="dt-search"
