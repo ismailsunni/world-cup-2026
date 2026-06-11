@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { scaleLinear } from 'd3-scale'
 import type { Group } from '../types'
 import type { Metric } from '../metrics'
+import { confColor, flagUrl, teamCode } from '../flags'
 
 const props = defineProps<{
   groups: Group[]
@@ -10,23 +11,56 @@ const props = defineProps<{
 }>()
 
 // Layout constants
-const ROW_H = 44
-const MARGIN = { top: 28, right: 32, bottom: 8, left: 56 }
+const ROW_H = 56
+const MARGIN = { top: 30, right: 36, bottom: 10, left: 56 }
 const PLOT_W = 760
 const width = MARGIN.left + PLOT_W + MARGIN.right
+const FW = 26 // flag width
+const FH = 18 // flag height
+const LABEL_DY = FH / 2 + 14 // label baseline below the flag
+const LABEL_GAP = 30 // min horizontal spacing between labels
 
 const fmt = (n: number) => (props.metric.format ? props.metric.format(n) : String(n))
-const abbr = (name: string) => name.slice(0, 3).toUpperCase()
+const abbr = (name: string) => teamCode(name)
 
 interface Dot {
   team: string
+  conf: string
   raw: number
-  x: number
+  x: number // true position on the line
+  labelX: number // de-overlapped label position
+  flag: string | null
 }
 interface Row {
   group: string
   y: number
   dots: Dot[]
+}
+
+/** Spread label x-positions so they keep a minimum gap, staying within [lo, hi]. */
+function dodge(xs: number[], minGap: number, lo: number, hi: number): number[] {
+  const n = xs.length
+  if (n === 0) return []
+  const order = xs.map((x, i) => ({ x, i })).sort((a, b) => a.x - b.x)
+  const placed = order.map((o) => o.x)
+  for (let k = 1; k < n; k++)
+    if (placed[k] < placed[k - 1] + minGap) placed[k] = placed[k - 1] + minGap
+  if (placed[n - 1] > hi) {
+    const shift = placed[n - 1] - hi
+    for (let k = 0; k < n; k++) placed[k] -= shift
+    for (let k = n - 2; k >= 0; k--)
+      if (placed[k] > placed[k + 1] - minGap) placed[k] = placed[k + 1] - minGap
+  }
+  if (placed[0] < lo) {
+    placed[0] = lo
+    for (let k = 1; k < n; k++)
+      if (placed[k] < placed[k - 1] + minGap) placed[k] = placed[k - 1] + minGap
+  }
+  const out = new Array<number>(n)
+  order.forEach((o, k) => {
+    out[o.i] = placed[k]
+  })
+  return out
 }
 
 const model = computed(() => {
@@ -40,23 +74,32 @@ const model = computed(() => {
   const min = all.length ? Math.min(...all) : 0
   const max = all.length ? Math.max(...all) : 1
   const pad = (max - min) * 0.05 || 1
-
-  // lowerIsBetter metrics read left=best by inverting the range visually.
   const domain: [number, number] = [min - pad, max + pad]
   const x = scaleLinear()
     .domain(props.metric.lowerIsBetter ? [domain[1], domain[0]] : domain)
     .range([0, PLOT_W])
 
-  const rows: Row[] = props.groups.map((g, i) => ({
-    group: g.group,
-    y: MARGIN.top + i * ROW_H,
-    dots: g.teams
+  const rows: Row[] = props.groups.map((g, i) => {
+    const base = g.teams
       .map((t) => {
         const raw = props.metric.value(t)
-        return raw == null ? null : { team: t.team, raw, x: x(raw) }
+        return raw == null
+          ? null
+          : { team: t.team, conf: t.confederation, raw, x: x(raw), flag: flagUrl(t.team) }
       })
-      .filter((d): d is Dot => d != null),
-  }))
+      .filter((d): d is Omit<Dot, 'labelX'> => d != null)
+    const labelXs = dodge(
+      base.map((d) => d.x),
+      LABEL_GAP,
+      LABEL_GAP / 2,
+      PLOT_W - LABEL_GAP / 2,
+    )
+    return {
+      group: g.group,
+      y: MARGIN.top + i * ROW_H,
+      dots: base.map((d, k) => ({ ...d, labelX: labelXs[k] })),
+    }
+  })
 
   const ticks = x.ticks(6).map((t) => ({ x: x(t), label: fmt(t) }))
   const height = MARGIN.top + props.groups.length * ROW_H + MARGIN.bottom
@@ -79,7 +122,7 @@ const model = computed(() => {
         v-for="t in model.ticks"
         :key="`t-${t.label}`"
         :x="MARGIN.left + t.x"
-        :y="MARGIN.top - 12"
+        :y="MARGIN.top - 14"
         text-anchor="middle"
       >
         {{ t.label }}
@@ -88,7 +131,7 @@ const model = computed(() => {
 
     <!-- one row per group -->
     <g v-for="row in model.rows" :key="row.group" :transform="`translate(0,${row.y})`">
-      <text class="group-label" :x="MARGIN.left - 16" y="4" text-anchor="end">
+      <text class="group-label" :x="MARGIN.left - 18" y="4" text-anchor="end">
         {{ row.group }}
       </text>
       <line
@@ -98,15 +141,46 @@ const model = computed(() => {
         y1="0"
         y2="0"
       />
-      <g
-        v-for="d in row.dots"
-        :key="d.team"
-        class="dot"
-        :transform="`translate(${MARGIN.left + d.x},0)`"
-      >
-        <title>{{ d.team }} — {{ fmt(d.raw) }}{{ metric.unit ? ' ' + metric.unit : '' }}</title>
-        <circle r="7" />
-        <text class="dot-label" y="-12" text-anchor="middle">{{ abbr(d.team) }}</text>
+      <g v-for="d in row.dots" :key="d.team" class="dot">
+        <title>{{ d.team }} ({{ d.conf }}) — {{ fmt(d.raw) }}{{ metric.unit ? ' ' + metric.unit : '' }}</title>
+        <!-- connector from flag to displaced label -->
+        <line
+          v-if="Math.abs(d.labelX - d.x) > 1"
+          class="connector"
+          :x1="MARGIN.left + d.x"
+          :y1="FH / 2"
+          :x2="MARGIN.left + d.labelX"
+          :y2="LABEL_DY - 9"
+        />
+        <!-- flag marker with confederation-colored border -->
+        <image
+          v-if="d.flag"
+          :href="d.flag"
+          :x="MARGIN.left + d.x - FW / 2"
+          :y="-FH / 2"
+          :width="FW"
+          :height="FH"
+          preserveAspectRatio="xMidYMid slice"
+        />
+        <rect
+          class="flag-border"
+          :x="MARGIN.left + d.x - FW / 2"
+          :y="-FH / 2"
+          :width="FW"
+          :height="FH"
+          rx="3"
+          :stroke="confColor(d.conf)"
+          :fill="d.flag ? 'none' : confColor(d.conf)"
+        />
+        <text
+          class="dot-label"
+          :x="MARGIN.left + d.labelX"
+          :y="LABEL_DY"
+          text-anchor="middle"
+          :fill="confColor(d.conf)"
+        >
+          {{ abbr(d.team) }}
+        </text>
       </g>
     </g>
   </svg>
@@ -131,24 +205,27 @@ const model = computed(() => {
   stroke: #e5e7eb;
   stroke-width: 2;
 }
-.dot circle {
-  fill: #2563eb;
-  fill-opacity: 0.85;
-  stroke: #fff;
-  stroke-width: 1.5;
-  /* animate repositioning when the metric changes */
-  transition: transform 0.5s ease;
+.dot image,
+.dot rect {
+  transition: x 0.5s ease;
 }
-.dot {
-  transition: transform 0.5s ease;
+.dot text {
+  transition: x 0.5s ease;
+}
+.flag-border {
+  stroke-width: 2;
+  fill-opacity: 0.9;
+}
+.connector {
+  stroke: #cbd5e1;
+  stroke-width: 1;
 }
 .dot-label {
   font-size: 10px;
-  fill: #374151;
+  font-weight: 700;
   pointer-events: none;
 }
-.dot:hover circle {
-  fill: #1d4ed8;
-  r: 9;
+.dot:hover .flag-border {
+  stroke-width: 3;
 }
 </style>

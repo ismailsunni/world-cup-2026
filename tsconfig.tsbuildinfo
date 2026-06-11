@@ -1,1 +1,0 @@
-{"root":["./src/main.ts","./src/metrics.ts","./src/types.ts","./src/composables/useData.ts","./src/App.vue","./src/components/GroupDotPlot.vue","./src/components/MetricSwitcher.vue","./env.d.ts"],"version":"5.7.3"}
