@@ -10,7 +10,6 @@ const rows = computed(() => (data.value ? buildPlayerRows(data.value) : []))
 
 <template>
   <div class="page">
-    <router-link class="back" to="/">← Back to chart</router-link>
     <h2>All players</h2>
     <p v-if="loading" class="status">Loading data…</p>
     <p v-else-if="error" class="status error">Failed to load data: {{ error }}</p>
@@ -25,17 +24,8 @@ const rows = computed(() => (data.value ? buildPlayerRows(data.value) : []))
   height: calc(100vh - 150px);
   min-height: 360px;
 }
-.back {
-  color: #2563eb;
-  text-decoration: none;
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-.back:hover {
-  text-decoration: underline;
-}
 h2 {
-  margin: 0.4rem 0 0.75rem;
+  margin: 0 0 0.75rem;
   font-size: 1.4rem;
 }
 .status {
