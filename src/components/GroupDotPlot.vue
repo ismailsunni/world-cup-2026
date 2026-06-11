@@ -10,7 +10,7 @@ const props = defineProps<{
   metric: Metric
 }>()
 
-const emit = defineEmits<{ select: [Team] }>()
+const emit = defineEmits<{ select: [Team]; selectGroup: [string] }>()
 
 // Layout constants
 const ROW_H = 56
@@ -159,7 +159,26 @@ const model = computed(() => {
 
     <!-- one row per group -->
     <g v-for="row in model.rows" :key="row.group" :transform="`translate(0,${row.y})`">
-      <text class="group-label" :x="MARGIN.left - 18" y="4" text-anchor="end">
+      <rect
+        class="row-hit"
+        :x="0"
+        :y="-ROW_H / 2"
+        :width="width"
+        :height="ROW_H"
+        tabindex="0"
+        role="button"
+        :aria-label="`Group ${row.group}: show teams`"
+        @click="emit('selectGroup', row.group)"
+        @keydown.enter.prevent="emit('selectGroup', row.group)"
+        @keydown.space.prevent="emit('selectGroup', row.group)"
+      />
+      <text
+        class="group-label"
+        :x="MARGIN.left - 18"
+        y="4"
+        text-anchor="end"
+        @click="emit('selectGroup', row.group)"
+      >
         {{ row.group }}
       </text>
       <line
@@ -265,15 +284,30 @@ const model = computed(() => {
   font-size: 14px;
   font-weight: 700;
   fill: #111827;
+  cursor: pointer;
+}
+.row-hit {
+  fill: transparent;
+  pointer-events: all;
+  cursor: pointer;
+}
+.row-hit:hover {
+  fill: #f3f4f6;
+}
+.row-hit:focus {
+  outline: 2px solid #93c5fd;
+  outline-offset: -2px;
 }
 .group-line {
   stroke: #e5e7eb;
   stroke-width: 2;
+  pointer-events: none;
 }
 .avg-tick {
   stroke: #111827;
   stroke-width: 2;
   stroke-dasharray: 2 2;
+  pointer-events: none;
 }
 .avg-value {
   font-size: 12px;
