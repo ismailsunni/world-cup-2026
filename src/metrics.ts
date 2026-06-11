@@ -69,6 +69,12 @@ export const METRICS: Metric[] = [
     value: (t) => sum(goals(t)),
     format: (n) => String(Math.round(n)),
   },
+  {
+    id: 'wc_appearances_prev',
+    label: 'Previous WC appearances',
+    value: (t) => t.wc_appearances_prev,
+    format: (n) => String(Math.round(n)),
+  },
 ]
 
 export const DEFAULT_METRIC = METRICS[0]
