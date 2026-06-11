@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { scaleLinear } from 'd3-scale'
-import type { Group } from '../types'
+import type { Group, Team } from '../types'
 import type { Metric } from '../metrics'
 import { confColor, flagUrl, teamCode } from '../flags'
 
@@ -10,9 +10,11 @@ const props = defineProps<{
   metric: Metric
 }>()
 
+const emit = defineEmits<{ select: [Team] }>()
+
 // Layout constants
 const ROW_H = 56
-const MARGIN = { top: 30, right: 36, bottom: 10, left: 56 }
+const MARGIN = { top: 38, right: 74, bottom: 10, left: 56 }
 const PLOT_W = 760
 const width = MARGIN.left + PLOT_W + MARGIN.right
 const FW = 26 // flag width
@@ -30,11 +32,14 @@ interface Dot {
   x: number // true position on the line
   labelX: number // de-overlapped label position
   flag: string | null
+  data: Team
 }
 interface Row {
   group: string
   y: number
   dots: Dot[]
+  avg: number | null // mean metric value across the group's teams
+  avgX: number | null
 }
 
 /** Spread label x-positions so they keep a minimum gap, staying within [lo, hi]. */
@@ -85,7 +90,7 @@ const model = computed(() => {
         const raw = props.metric.value(t)
         return raw == null
           ? null
-          : { team: t.team, conf: t.confederation, raw, x: x(raw), flag: flagUrl(t.team) }
+          : { team: t.team, conf: t.confederation, raw, x: x(raw), flag: flagUrl(t.team), data: t }
       })
       .filter((d): d is Omit<Dot, 'labelX'> => d != null)
     const labelXs = dodge(
@@ -94,10 +99,15 @@ const model = computed(() => {
       LABEL_GAP / 2,
       PLOT_W - LABEL_GAP / 2,
     )
+    const avg = base.length
+      ? base.reduce((s, d) => s + d.raw, 0) / base.length
+      : null
     return {
       group: g.group,
       y: MARGIN.top + i * ROW_H,
       dots: base.map((d, k) => ({ ...d, labelX: labelXs[k] })),
+      avg,
+      avgX: avg == null ? null : x(avg),
     }
   })
 
@@ -122,12 +132,16 @@ const model = computed(() => {
         v-for="t in model.ticks"
         :key="`t-${t.label}`"
         :x="MARGIN.left + t.x"
-        :y="MARGIN.top - 14"
+        :y="MARGIN.top - 22"
         text-anchor="middle"
       >
         {{ t.label }}
       </text>
     </g>
+    <!-- group-average column header -->
+    <text class="col-head" :x="MARGIN.left + PLOT_W + 8" :y="MARGIN.top - 22">
+      group avg
+    </text>
 
     <!-- one row per group -->
     <g v-for="row in model.rows" :key="row.group" :transform="`translate(0,${row.y})`">
@@ -141,7 +155,34 @@ const model = computed(() => {
         y1="0"
         y2="0"
       />
-      <g v-for="d in row.dots" :key="d.team" class="dot">
+      <!-- group average: vertical tick on the line + value in the right column -->
+      <line
+        v-if="row.avgX != null"
+        class="avg-tick"
+        :x1="MARGIN.left + row.avgX"
+        :x2="MARGIN.left + row.avgX"
+        y1="-12"
+        y2="12"
+      />
+      <text
+        v-if="row.avg != null"
+        class="avg-value"
+        :x="MARGIN.left + PLOT_W + 8"
+        y="4"
+      >
+        {{ fmt(row.avg) }}
+      </text>
+      <g
+        v-for="d in row.dots"
+        :key="d.team"
+        class="dot"
+        tabindex="0"
+        role="button"
+        :aria-label="`${d.team}: show squad`"
+        @click="emit('select', d.data)"
+        @keydown.enter.prevent="emit('select', d.data)"
+        @keydown.space.prevent="emit('select', d.data)"
+      >
         <title>{{ d.team }} ({{ d.conf }}) — {{ fmt(d.raw) }}{{ metric.unit ? ' ' + metric.unit : '' }}</title>
         <!-- connector from flag to displaced label -->
         <line
@@ -204,6 +245,32 @@ const model = computed(() => {
 .group-line {
   stroke: #e5e7eb;
   stroke-width: 2;
+}
+.avg-tick {
+  stroke: #111827;
+  stroke-width: 2;
+  stroke-dasharray: 2 2;
+}
+.avg-value {
+  font-size: 12px;
+  font-weight: 700;
+  fill: #111827;
+}
+.col-head {
+  font-size: 10px;
+  font-weight: 600;
+  fill: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.dot {
+  cursor: pointer;
+}
+.dot:focus {
+  outline: none;
+}
+.dot:focus .flag-border {
+  stroke-width: 3;
 }
 .dot image,
 .dot rect {

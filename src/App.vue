@@ -2,13 +2,16 @@
 import { ref } from 'vue'
 import { useData } from './composables/useData'
 import { DEFAULT_METRIC, type Metric } from './metrics'
+import type { Team } from './types'
 import GroupDotPlot from './components/GroupDotPlot.vue'
 import MetricSwitcher from './components/MetricSwitcher.vue'
+import SquadPanel from './components/SquadPanel.vue'
 import { CONFEDERATION_COLOR } from './flags'
 
 const { data, error, loading } = useData()
 const metric = ref<Metric>(DEFAULT_METRIC)
 const confederations = Object.entries(CONFEDERATION_COLOR)
+const selected = ref<Team | null>(null)
 </script>
 
 <template>
@@ -16,8 +19,9 @@ const confederations = Object.entries(CONFEDERATION_COLOR)
     <header>
       <h1>World Cup 2026 — Groups</h1>
       <p class="sub">
-        Each group is a line; each dot is a team, placed by the selected metric. Hover a
-        dot for the value.
+        Each group is a line; each flag is a team, placed by the selected metric. The
+        dashed tick marks the group average (read the right-hand column to compare
+        groups). Click a team to see its squad.
       </p>
     </header>
 
@@ -34,7 +38,14 @@ const confederations = Object.entries(CONFEDERATION_COLOR)
 
     <p v-if="loading" class="status">Loading data…</p>
     <p v-else-if="error" class="status error">Failed to load data: {{ error }}</p>
-    <GroupDotPlot v-else-if="data" :groups="data.groups" :metric="metric" />
+    <GroupDotPlot
+      v-else-if="data"
+      :groups="data.groups"
+      :metric="metric"
+      @select="selected = $event"
+    />
+
+    <SquadPanel v-if="selected" :team="selected" @close="selected = null" />
   </main>
 </template>
 
