@@ -71,6 +71,9 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
         <h2>{{ team.team }} <span class="grouptag">Group {{ group.group }}</span></h2>
         <p class="meta">
           {{ team.confederation }} · FIFA #{{ team.fifa_ranking ?? '—' }}
+          <template v-if="team.elo_rating">
+            · Elo #{{ team.elo_rank }} ({{ team.elo_rating }})
+          </template>
           <template v-if="team.coach"> · Coach: {{ team.coach }}</template>
           · {{ team.squad.length }} players · {{ clubCount }} clubs
         </p>

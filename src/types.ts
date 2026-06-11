@@ -15,6 +15,8 @@ export interface Team {
   draw_position: number | null
   confederation: string
   fifa_ranking: number | null
+  elo_rank: number | null
+  elo_rating: number | null
   host: boolean
   debut: boolean
   wc_appearances_prev: number | null

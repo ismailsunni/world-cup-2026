@@ -45,6 +45,19 @@ export const METRICS: Metric[] = [
     lowerIsBetter: true,
   },
   {
+    id: 'elo_rating',
+    label: 'Elo rating',
+    value: (t) => t.elo_rating,
+    format: (n) => String(Math.round(n)),
+  },
+  {
+    id: 'elo_rank',
+    label: 'Elo ranking',
+    value: (t) => t.elo_rank,
+    format: (n) => `#${Math.round(n)}`,
+    lowerIsBetter: true,
+  },
+  {
     id: 'total_caps',
     label: 'Total squad caps',
     value: (t) => sum(caps(t)),
