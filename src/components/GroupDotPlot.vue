@@ -14,7 +14,7 @@ const emit = defineEmits<{ select: [Team] }>()
 
 // Layout constants
 const ROW_H = 56
-const MARGIN = { top: 38, right: 74, bottom: 10, left: 56 }
+const MARGIN = { top: 38, right: 104, bottom: 10, left: 56 }
 const PLOT_W = 760
 const width = MARGIN.left + PLOT_W + MARGIN.right
 const FW = 26 // flag width
@@ -40,6 +40,7 @@ interface Row {
   dots: Dot[]
   avg: number | null // mean metric value across the group's teams
   avgX: number | null
+  kind: 'max' | 'min' | null // highest / lowest group average overall
 }
 
 /** Spread label x-positions so they keep a minimum gap, staying within [lo, hi]. */
@@ -108,8 +109,21 @@ const model = computed(() => {
       dots: base.map((d, k) => ({ ...d, labelX: labelXs[k] })),
       avg,
       avgX: avg == null ? null : x(avg),
+      kind: null as Row['kind'],
     }
   })
+
+  // Mark the highest and lowest group averages overall.
+  const avgs = rows.map((r) => r.avg).filter((v): v is number => v != null)
+  if (avgs.length) {
+    const maxAvg = Math.max(...avgs)
+    const minAvg = Math.min(...avgs)
+    for (const r of rows) {
+      if (r.avg == null) continue
+      if (r.avg === maxAvg) r.kind = 'max'
+      else if (r.avg === minAvg) r.kind = 'min'
+    }
+  }
 
   const ticks = x.ticks(6).map((t) => ({ x: x(t), label: fmt(t) }))
   const height = MARGIN.top + props.groups.length * ROW_H + MARGIN.bottom
@@ -167,10 +181,20 @@ const model = computed(() => {
       <text
         v-if="row.avg != null"
         class="avg-value"
+        :class="row.kind"
         :x="MARGIN.left + PLOT_W + 8"
         y="4"
       >
         {{ fmt(row.avg) }}
+      </text>
+      <text
+        v-if="row.kind"
+        class="avg-tag"
+        :class="row.kind"
+        :x="MARGIN.left + PLOT_W + 48"
+        y="4"
+      >
+        {{ row.kind === 'max' ? '▲ max' : '▼ min' }}
       </text>
       <g
         v-for="d in row.dots"
@@ -255,6 +279,18 @@ const model = computed(() => {
   font-size: 12px;
   font-weight: 700;
   fill: #111827;
+}
+.avg-value.max,
+.avg-tag.max {
+  fill: #b91c1c;
+}
+.avg-value.min,
+.avg-tag.min {
+  fill: #1d4ed8;
+}
+.avg-tag {
+  font-size: 10px;
+  font-weight: 700;
 }
 .col-head {
   font-size: 10px;

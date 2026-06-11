@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useData } from './composables/useData'
 import { DEFAULT_METRIC, type Metric } from './metrics'
-import type { Team } from './types'
+import type { Group, Team } from './types'
 import GroupDotPlot from './components/GroupDotPlot.vue'
 import MetricSwitcher from './components/MetricSwitcher.vue'
 import SquadPanel from './components/SquadPanel.vue'
@@ -12,6 +12,14 @@ const { data, error, loading } = useData()
 const metric = ref<Metric>(DEFAULT_METRIC)
 const confederations = Object.entries(CONFEDERATION_COLOR)
 const selected = ref<Team | null>(null)
+
+const selectedGroup = computed<Group | null>(() => {
+  if (!selected.value || !data.value) return null
+  return (
+    data.value.groups.find((g) => g.teams.some((t) => t.team === selected.value!.team)) ??
+    null
+  )
+})
 </script>
 
 <template>
@@ -20,8 +28,8 @@ const selected = ref<Team | null>(null)
       <h1>World Cup 2026 — Groups</h1>
       <p class="sub">
         Each group is a line; each flag is a team, placed by the selected metric. The
-        dashed tick marks the group average (read the right-hand column to compare
-        groups). Click a team to see its squad.
+        dashed tick marks the group average — the right-hand column flags the highest
+        (▲ max) and lowest (▼ min). Click a team to see its squad below.
       </p>
     </header>
 
@@ -45,7 +53,13 @@ const selected = ref<Team | null>(null)
       @select="selected = $event"
     />
 
-    <SquadPanel v-if="selected" :team="selected" @close="selected = null" />
+    <SquadPanel
+      v-if="selected && selectedGroup"
+      :team="selected"
+      :group="selectedGroup"
+      :metric="metric"
+      @close="selected = null"
+    />
   </main>
 </template>
 
