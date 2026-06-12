@@ -60,7 +60,7 @@ const rows = computed<Row[]>(() => {
   }
   const out = [...map.values()]
   for (const r of out) r.inWC2026 = wc2026.value.has(r.country)
-  return out.filter((r) => !onlyWC2026.value || r.inWC2026)
+  return out
 })
 
 // --- sorting -----------------------------------------------------------------
@@ -81,18 +81,32 @@ function toggleSort(key: string) {
     sortDir.value = key === 'country' ? 'asc' : 'desc'
   }
 }
-const view = computed(() => {
+function sortRows(list: Row[]): Row[] {
   const dir = sortDir.value === 'asc' ? 1 : -1
   const key = sortKey.value
-  return [...rows.value].sort((a, b) => {
+  return [...list].sort((a, b) => {
     const av = sortVal(a, key)
     const bv = sortVal(b, key)
     const cmp =
       typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number)
     return cmp * dir || a.country.localeCompare(b.country)
   })
-})
+}
 const arrow = (key: string) => (sortKey.value === key ? (sortDir.value === 'asc' ? '▲' : '▼') : '')
+
+// One table when unfiltered; when the 2026 filter is on, split into a 2026
+// table and a second table for the other historical quarter-finalists.
+const sections = computed(() =>
+  onlyWC2026.value
+    ? [
+        { title: 'In the 2026 World Cup', rows: sortRows(rows.value.filter((r) => r.inWC2026)) },
+        {
+          title: 'Other historical quarter-finalists',
+          rows: sortRows(rows.value.filter((r) => !r.inWC2026)),
+        },
+      ]
+    : [{ title: '', rows: sortRows(rows.value) }],
+)
 </script>
 
 <template>
@@ -120,60 +134,67 @@ const arrow = (key: string) => (sortKey.value === key ? (sortDir.value === 'asc'
 
     <p v-if="loading" class="status">Loading data…</p>
     <p v-else-if="error" class="status error">Failed to load data: {{ error }}</p>
-    <div v-else class="scroll">
-      <table>
-        <thead>
-          <tr>
-            <th class="rank">#</th>
-            <th class="cty sortable" :class="{ sorted: sortKey === 'country' }" @click="toggleSort('country')">
-              Country <span class="arr">{{ arrow('country') }}</span>
-            </th>
-            <th
-              v-for="y in years"
-              :key="y"
-              class="yr sortable"
-              :class="{ sorted: sortKey === String(y) }"
-              @click="toggleSort(String(y))"
-            >
-              {{ y }} <span class="arr">{{ arrow(String(y)) }}</span>
-            </th>
-            <th class="num sortable" :class="{ sorted: sortKey === 'points' }" @click="toggleSort('points')">
-              Pts <span class="arr">{{ arrow('points') }}</span>
-            </th>
-            <th class="num sortable" :class="{ sorted: sortKey === 'apps' }" @click="toggleSort('apps')">
-              Apps <span class="arr">{{ arrow('apps') }}</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(r, i) in view" :key="r.country" :class="{ wc: r.inWC2026 }">
-            <td class="rank">{{ i + 1 }}</td>
-            <td class="cty">
-              <img v-if="flagUrl(r.country)" class="flag" :src="flagUrl(r.country)!" :alt="r.country" />
-              <span class="name">{{ r.country }}</span>
-              <span v-if="r.titles" class="stars" :title="`${r.titles} title${r.titles > 1 ? 's' : ''}`">
-                {{ '★'.repeat(r.titles) }}
-              </span>
-            </td>
-            <td v-for="y in years" :key="y" class="cell">
-              <span
-                v-if="r.byYear[y]"
-                class="chip"
-                :class="'res-' + r.byYear[y]"
-                :title="`${y}: ${META[r.byYear[y]].full}`"
-              >
-                {{ META[r.byYear[y]].label }}
-              </span>
-            </td>
-            <td class="num pts">{{ r.points }}</td>
-            <td class="num">{{ r.apps }}</td>
-          </tr>
-          <tr v-if="!view.length">
-            <td :colspan="years.length + 4" class="empty">No teams match.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <template v-else>
+      <section v-for="(sec, si) in sections" :key="si" class="tablewrap">
+        <h3 v-if="sec.title" class="tabletitle">
+          {{ sec.title }} <span class="cnt">{{ sec.rows.length }}</span>
+        </h3>
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th class="rank">#</th>
+                <th class="cty sortable" :class="{ sorted: sortKey === 'country' }" @click="toggleSort('country')">
+                  Country <span class="arr">{{ arrow('country') }}</span>
+                </th>
+                <th
+                  v-for="y in years"
+                  :key="y"
+                  class="yr sortable"
+                  :class="{ sorted: sortKey === String(y) }"
+                  @click="toggleSort(String(y))"
+                >
+                  {{ y }} <span class="arr">{{ arrow(String(y)) }}</span>
+                </th>
+                <th class="num sortable" :class="{ sorted: sortKey === 'points' }" @click="toggleSort('points')">
+                  Pts <span class="arr">{{ arrow('points') }}</span>
+                </th>
+                <th class="num sortable" :class="{ sorted: sortKey === 'apps' }" @click="toggleSort('apps')">
+                  Apps <span class="arr">{{ arrow('apps') }}</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(r, i) in sec.rows" :key="r.country" :class="{ wc: r.inWC2026 }">
+                <td class="rank">{{ i + 1 }}</td>
+                <td class="cty">
+                  <img v-if="flagUrl(r.country)" class="flag" :src="flagUrl(r.country)!" :alt="r.country" />
+                  <span class="name">{{ r.country }}</span>
+                  <span v-if="r.titles" class="stars" :title="`${r.titles} title${r.titles > 1 ? 's' : ''}`">
+                    {{ '★'.repeat(r.titles) }}
+                  </span>
+                </td>
+                <td v-for="y in years" :key="y" class="cell">
+                  <span
+                    v-if="r.byYear[y]"
+                    class="chip"
+                    :class="'res-' + r.byYear[y]"
+                    :title="`${y}: ${META[r.byYear[y]].full}`"
+                  >
+                    {{ META[r.byYear[y]].label }}
+                  </span>
+                </td>
+                <td class="num pts">{{ r.points }}</td>
+                <td class="num">{{ r.apps }}</td>
+              </tr>
+              <tr v-if="!sec.rows.length">
+                <td :colspan="years.length + 4" class="empty">No teams.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </template>
   </div>
 </template>
 
@@ -221,6 +242,19 @@ h2 {
   font-size: 0.85rem;
   color: #374151;
   white-space: nowrap;
+}
+.tablewrap + .tablewrap {
+  margin-top: 1.5rem;
+}
+.tabletitle {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: #374151;
+}
+.tabletitle .cnt {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #9ca3af;
 }
 .scroll {
   overflow-x: auto;
