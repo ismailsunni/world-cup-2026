@@ -215,7 +215,7 @@ h2 {
 .sub {
   margin: 0 0 1rem;
   color: #6b7280;
-  max-width: 72ch;
+  max-width: 100%;
 }
 .controls {
   display: flex;
