@@ -527,6 +527,22 @@ const champion = computed(() =>
   geometry.value ? (resolved.value.get(geometry.value.finalNo)?.winner ?? null) : null,
 )
 
+// Runner-up + third-place playoff result (champion is shown in the top bar).
+const podium = computed(() => {
+  if (!data.value || !geometry.value) return null
+  const finalNo = geometry.value.finalNo
+  const fin = resolved.value.get(finalNo)
+  const thirdNo = data.value.bracket.find(
+    (b) => b.feeds_into == null && b.match_no !== finalNo,
+  )?.match_no
+  const tp = thirdNo != null ? resolved.value.get(thirdNo) : null
+  return {
+    runnerUp: fin?.loser ?? null,
+    third: tp?.winner ?? null,
+    fourth: tp?.loser ?? null,
+  }
+})
+
 // --- bracket analysis (the 4 teams feeding each Round-of-16 match) ----------
 // A "bracket" = two R32 ties → one R16 match; its winner reaches the QF.
 const analysisOpen = ref(false)
@@ -723,6 +739,30 @@ function slotOrigin(matchNo: number, key: 'team1' | 'team2'): string {
         reorder a group's teams or change which third-placed teams qualify, then click a team in
         any knockout match to send them through — results propagate up to the final.
       </p>
+
+      <div v-if="podium" class="podium">
+        <div class="pod">
+          <span class="podlabel ru">Runner-up</span>
+          <span class="podteam">
+            <img v-if="podium.runnerUp && flagUrl(podium.runnerUp)" :src="flagUrl(podium.runnerUp)!" :alt="podium.runnerUp" />
+            {{ podium.runnerUp ?? '—' }}
+          </span>
+        </div>
+        <div class="pod">
+          <span class="podlabel third">3rd place</span>
+          <span class="podteam">
+            <img v-if="podium.third && flagUrl(podium.third)" :src="flagUrl(podium.third)!" :alt="podium.third" />
+            {{ podium.third ?? '—' }}
+          </span>
+        </div>
+        <div class="pod">
+          <span class="podlabel fourth">4th place</span>
+          <span class="podteam">
+            <img v-if="podium.fourth && flagUrl(podium.fourth)" :src="flagUrl(podium.fourth)!" :alt="podium.fourth" />
+            {{ podium.fourth ?? '—' }}
+          </span>
+        </div>
+      </div>
 
       <div class="topbar">
         <div v-if="champion" class="champ">
@@ -1046,7 +1086,51 @@ h2 {
 .sub {
   margin: 0 0 1rem;
   color: #6b7280;
-  max-width: 70ch;
+  max-width: 100%;
+}
+.podium {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  margin: 0 0 1rem;
+}
+.pod {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0.4rem 0.7rem;
+}
+.podlabel {
+  font-size: 0.64rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.podlabel.ru {
+  color: #64748b;
+}
+.podlabel.third {
+  color: #b45309;
+}
+.podlabel.fourth {
+  color: #9ca3af;
+}
+.podteam {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 700;
+  color: #111827;
+  font-size: 0.9rem;
+}
+.podteam img {
+  width: 24px;
+  height: auto;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
 }
 .status {
   color: #6b7280;
