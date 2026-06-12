@@ -5,9 +5,10 @@
 <template>
   <main class="app">
     <header>
-      <router-link class="title" to="/"><h1>World Cup 2026 — Groups</h1></router-link>
+      <router-link class="title" to="/"><h1>World Cup 2026 — Explorer</h1></router-link>
       <nav>
-        <router-link to="/">Chart</router-link>
+        <router-link to="/">Group Analytics</router-link>
+        <router-link to="/scatter">Player Chart</router-link>
         <router-link to="/teams">Teams</router-link>
         <router-link to="/players">Players</router-link>
       </nav>

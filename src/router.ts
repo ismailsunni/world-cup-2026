@@ -8,6 +8,7 @@ export const router = createRouter({
   scrollBehavior: () => ({ top: 0 }),
   routes: [
     { path: '/', name: 'home', component: HomeView },
+    { path: '/scatter', name: 'scatter', component: () => import('./views/ScatterView.vue') },
     { path: '/teams', name: 'teams', component: () => import('./views/TeamsView.vue') },
     { path: '/players', name: 'players', component: () => import('./views/PlayersView.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/' },

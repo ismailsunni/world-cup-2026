@@ -129,3 +129,17 @@ export const CONFEDERATIONS = Object.keys(CONFEDERATION_COLOR)
 export function confColor(conf: string): string {
   return CONFEDERATION_COLOR[conf] ?? '#6b7280'
 }
+
+// One color per playing position — drives the scatter-plot dots and its legend.
+export const POSITION_COLOR: Record<string, string> = {
+  GK: '#f59e0b', // amber — goalkeepers
+  DF: '#2563eb', // blue — defenders
+  MF: '#16a34a', // green — midfielders
+  FW: '#e11d48', // rose — forwards
+}
+
+export const POSITIONS = Object.keys(POSITION_COLOR)
+
+export function posColor(pos: string): string {
+  return POSITION_COLOR[pos] ?? '#6b7280'
+}
