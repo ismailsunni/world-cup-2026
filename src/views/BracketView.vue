@@ -12,13 +12,29 @@ import {
 
 const { data, error, loading } = useData()
 
-// --- strength lookup (Elo rating; higher = stronger) -------------------------
+// --- strength lookup ---------------------------------------------------------
 const teamByName = computed(() => {
   const m = new Map<string, Team>()
   if (data.value) for (const g of data.value.groups) for (const t of g.teams) m.set(t.team, t)
   return m
 })
-const eloOf = (name: string) => teamByName.value.get(name)?.elo_rating ?? -1
+
+// Which metric seeds the predictions. Both map to "higher = stronger": Elo
+// directly, FIFA ranking inverted (a lower rank number is better).
+const basis = ref<'elo' | 'fifa'>('elo')
+const BASIS_LABEL = { elo: 'Elo rating', fifa: 'FIFA ranking' }
+
+const strengthOf = (name: string) => {
+  const t = teamByName.value.get(name)
+  if (!t) return -Infinity
+  return basis.value === 'elo' ? (t.elo_rating ?? -1) : -(t.fifa_ranking ?? 999)
+}
+const seedVal = (name: string) => {
+  const t = teamByName.value.get(name)
+  if (!t) return '—'
+  if (basis.value === 'elo') return t.elo_rating != null ? String(t.elo_rating) : '—'
+  return t.fifa_ranking != null ? `#${t.fifa_ranking}` : '—'
+}
 
 // --- editable prediction state ----------------------------------------------
 const order = ref<Record<string, string[]>>({}) // group → team names, finish order
@@ -30,16 +46,20 @@ function seed() {
   const ord: Record<string, string[]> = {}
   for (const g of data.value.groups) {
     ord[g.group] = [...g.teams]
-      .sort((a, b) => (b.elo_rating ?? -1) - (a.elo_rating ?? -1))
+      .sort((a, b) => strengthOf(b.team) - strengthOf(a.team))
       .map((t) => t.team)
   }
   order.value = ord
   thirdsRank.value = data.value.groups
     .map((g) => g.group)
-    .sort((a, b) => eloOf(ord[b][2]) - eloOf(ord[a][2]))
+    .sort((a, b) => strengthOf(ord[b][2]) - strengthOf(ord[a][2]))
   picks.value = {}
 }
-watch(data, seed, { immediate: true })
+// Seed on load and re-seed whenever the strength basis changes.
+watch([data, basis], seed, { immediate: true })
+
+// Group-stage + thirds editor is collapsed by default so the bracket leads.
+const editing = ref(false)
 
 // --- derived standings -------------------------------------------------------
 const QUALIFYING_THIRDS = 8
@@ -81,7 +101,7 @@ const resolved = computed(() => {
     thirdByGroup: thirdByGroup.value,
     thirdAlloc: thirdAlloc.value,
     picks: picks.value,
-    strength: eloOf,
+    strength: strengthOf,
   })
 })
 
@@ -168,9 +188,9 @@ function descOf(m: { team1_desc: string; team2_desc: string }, key: 'team1' | 't
 
     <template v-else-if="data">
       <p class="sub">
-        Predictions are seeded by <strong>Elo rating</strong>. Reorder a group's teams with the
-        arrows, change which third-placed teams qualify, then click a team in any knockout
-        match to send them through — results propagate up to the final.
+        Predictions are seeded by <strong>{{ BASIS_LABEL[basis] }}</strong>. Open the editor to
+        reorder a group's teams or change which third-placed teams qualify, then click a team in
+        any knockout match to send them through — results propagate up to the final.
       </p>
 
       <div class="topbar">
@@ -181,10 +201,19 @@ function descOf(m: { team1_desc: string; team2_desc: string }, key: 'team1' | 't
             {{ champion }}
           </span>
         </div>
-        <button class="reset" @click="seed">↺ Reset to Elo prediction</button>
+        <div class="basis" role="group" aria-label="Seeding basis">
+          <span class="basis-label">Seed by</span>
+          <button :class="{ on: basis === 'elo' }" @click="basis = 'elo'">Elo</button>
+          <button :class="{ on: basis === 'fifa' }" @click="basis = 'fifa'">FIFA</button>
+        </div>
+        <button class="reset" :class="{ on: editing }" @click="editing = !editing">
+          {{ editing ? '▲ Hide editor' : '▼ Edit groups & thirds' }}
+        </button>
+        <button class="reset" @click="seed">↺ Reset</button>
       </div>
 
       <!-- ===================== GROUP STAGE ===================== -->
+      <template v-if="editing">
       <h3 class="section">Group stage — predicted finish</h3>
       <div class="groups">
         <div v-for="g in groupLetters" :key="g" class="gcard">
@@ -198,7 +227,7 @@ function descOf(m: { team1_desc: string; team2_desc: string }, key: 'team1' | 't
               <span class="rank">{{ posLabel(i) }}</span>
               <img v-if="flagUrl(team)" class="flag" :src="flagUrl(team)!" :alt="team" />
               <span class="tname">{{ team }}</span>
-              <span class="elo">{{ teamByName.get(team)?.elo_rating ?? '—' }}</span>
+              <span class="elo">{{ seedVal(team) }}</span>
               <span class="badge">
                 <template v-if="i < 2">Q</template>
                 <template v-else-if="i === 2">3rd</template>
@@ -226,7 +255,7 @@ function descOf(m: { team1_desc: string; team2_desc: string }, key: 'team1' | 't
           <span class="gtag">{{ t.group }}</span>
           <img v-if="flagUrl(t.team)" class="flag" :src="flagUrl(t.team)!" :alt="t.team" />
           <span class="tname">{{ t.team }}</span>
-          <span class="elo">{{ teamByName.get(t.team)?.elo_rating ?? '—' }}</span>
+          <span class="elo">{{ seedVal(t.team) }}</span>
           <span class="badge">{{ t.qualifies ? 'Qualifies' : 'Out' }}</span>
           <span class="arrows">
             <button :disabled="i === 0" aria-label="Move up" @click="moveThird(i, -1)">▲</button>
@@ -240,6 +269,7 @@ function descOf(m: { team1_desc: string; team2_desc: string }, key: 'team1' | 't
           </span>
         </li>
       </ol>
+      </template>
 
       <!-- ===================== KNOCKOUT ===================== -->
       <h3 class="section">Knockout bracket</h3>
@@ -362,8 +392,35 @@ h2 {
   border-radius: 3px;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
 }
-.reset {
+.basis {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.basis-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #9ca3af;
+  font-weight: 700;
+}
+.basis button {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #6b7280;
+}
+.basis button.on {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+.reset {
   padding: 0.45rem 0.8rem;
   border: 1px solid #d1d5db;
   border-radius: 6px;
@@ -375,6 +432,10 @@ h2 {
 }
 .reset:hover {
   background: #f3f4f6;
+}
+.reset.on {
+  border-color: #2563eb;
+  color: #2563eb;
 }
 .section {
   margin: 1.5rem 0 0.75rem;
