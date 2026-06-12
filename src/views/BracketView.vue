@@ -177,20 +177,32 @@ function tweak() {
   const gb = thirds[k]
   ;[thirds[j], thirds[k]] = [thirds[k], thirds[j]]
   changes.push(`3rd place: ${ord[ga][2]} (#${j + 1}) ↔ ${ord[gb][2]} (#${k + 1})`)
-  // flip 3 random knockout results
-  const sides = currentSides()
+
+  // Apply the standings changes first; existing picks whose teams no longer
+  // exist fall back to the seed automatically when the bracket re-resolves.
+  order.value = ord
+  thirdsRank.value = thirds
+
+  // Knockout upsets: flip a few results by TEAM (not by slot). Downstream
+  // matches keep no pick there, so they recompute on the seed — a lucky
+  // underdog beats one opponent, then meets the favourite and bows out.
+  const newPicks = { ...picks.value }
   const nos = data.value.bracket.map((m) => m.match_no)
-  const flipped: { no: number; before: string | null }[] = []
   for (const no of shuffle(nos).slice(0, 3)) {
-    flipped.push({ no, before: resolved.value.get(no)?.winner ?? null })
-    sides[no] = sides[no] === 1 ? 0 : 1
+    const r = resolved.value.get(no)
+    if (!r?.team1 || !r?.team2 || !r.winner) continue
+    const underdog = r.winner === r.team1 ? r.team2 : r.team1
+    newPicks[no] = underdog
+    // clear picks further up this path so the upset can't ride the favourite's
+    // pre-set results — let the seed decide those rounds
+    let next = byMatchNo.value.get(no)?.feeds_into ?? null
+    while (next != null) {
+      delete newPicks[next]
+      next = byMatchNo.value.get(next)?.feeds_into ?? null
+    }
+    changes.push(`Match ${no}: ${underdog} upsets ${r.winner}`)
   }
-  applyState(ord, thirds, basis.value, sides)
-  for (const f of flipped) {
-    const after = resolved.value.get(f.no)?.winner ?? null
-    if (after && after !== f.before)
-      changes.push(`Match ${f.no}: ${after} advances (was ${f.before ?? '—'})`)
-  }
+  picks.value = newPicks
   lastTweak.value = changes
 }
 
