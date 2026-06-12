@@ -159,8 +159,13 @@ const sections = computed(() =>
                 <th class="num sortable" :class="{ sorted: sortKey === 'points' }" @click="toggleSort('points')">
                   Pts <span class="arr">{{ arrow('points') }}</span>
                 </th>
-                <th class="num sortable" :class="{ sorted: sortKey === 'apps' }" @click="toggleSort('apps')">
-                  Apps <span class="arr">{{ arrow('apps') }}</span>
+                <th
+                  class="num sortable"
+                  :class="{ sorted: sortKey === 'apps' }"
+                  title="Tournaments reaching the quarter-final or further"
+                  @click="toggleSort('apps')"
+                >
+                  QF+ runs <span class="arr">{{ arrow('apps') }}</span>
                 </th>
               </tr>
             </thead>
