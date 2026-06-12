@@ -427,6 +427,9 @@ const thirdsList = computed(() =>
 // --- bracket resolution ------------------------------------------------------
 const thirdSlots = computed(() => (data.value ? parseThirdSlots(data.value.bracket) : []))
 const thirdAlloc = computed(() => allocateThirds(thirdSlots.value, qualifiedGroups.value))
+const byMatchNo = computed(
+  () => new Map((data.value?.bracket ?? []).map((m) => [m.match_no, m])),
+)
 
 const resolved = computed(() => {
   if (!data.value) return new Map()
@@ -513,6 +516,23 @@ function posLabel(i: number) {
 }
 function descOf(m: { team1_desc: string; team2_desc: string }, key: 'team1' | 'team2') {
   return key === 'team1' ? m.team1_desc : m.team2_desc
+}
+
+// Short origin tag for a Round-of-32 slot: group winner E1, runner-up F2,
+// or the third-placed team's allocated group G3. Empty for later rounds.
+function slotOrigin(matchNo: number, key: 'team1' | 'team2'): string {
+  const m = byMatchNo.value.get(matchNo)
+  if (!m) return ''
+  const desc = key === 'team1' ? m.team1_desc : m.team2_desc
+  let mm = /^Winner Group ([A-L])$/.exec(desc)
+  if (mm) return `${mm[1]}1`
+  mm = /^Runner-up Group ([A-L])$/.exec(desc)
+  if (mm) return `${mm[1]}2`
+  if (/^3rd Group/.test(desc)) {
+    const g = thirdAlloc.value[`${matchNo}-${key}`]
+    return g ? `${g}3` : '3rd'
+  }
+  return ''
 }
 </script>
 
@@ -662,6 +682,10 @@ function descOf(m: { team1_desc: string; team2_desc: string }, key: 'team1' | 't
                 :disabled="!resolved.get(c.m.match_no)?.[key as 'team1' | 'team2']"
                 @click="pickWinner(c.m.match_no, resolved.get(c.m.match_no)?.[key as 'team1' | 'team2'] ?? null)"
               >
+                <span
+                  v-if="slotOrigin(c.m.match_no, key as 'team1' | 'team2')"
+                  class="origin"
+                >{{ slotOrigin(c.m.match_no, key as 'team1' | 'team2') }}</span>
                 <template v-if="resolved.get(c.m.match_no)?.[key as 'team1' | 'team2']">
                   <img
                     v-if="flagUrl(resolved.get(c.m.match_no)![key as 'team1' | 'team2']!)"
@@ -1032,6 +1056,22 @@ h2 {
 }
 .slot.unknown {
   cursor: default;
+}
+.slot .origin {
+  flex: none;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 4px;
+  padding: 0.05rem 0.2rem;
+  min-width: 1.45rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.slot.win .origin {
+  background: #bbf7d0;
+  color: #166534;
 }
 .slot .sname {
   flex: 1;

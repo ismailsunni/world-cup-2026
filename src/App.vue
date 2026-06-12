@@ -44,6 +44,7 @@ h1 {
 }
 nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.35rem;
 }
 nav a {
@@ -53,6 +54,7 @@ nav a {
   font-size: 0.9rem;
   font-weight: 600;
   color: #6b7280;
+  white-space: nowrap;
 }
 nav a:hover {
   background: #f3f4f6;
@@ -61,5 +63,27 @@ nav a:hover {
 nav a.router-link-exact-active {
   background: #2563eb;
   color: #fff;
+}
+
+@media (max-width: 640px) {
+  .app {
+    padding: 1rem 0.75rem 2.5rem;
+  }
+  header {
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  h1 {
+    font-size: 1.25rem;
+  }
+  nav {
+    /* full-width, evenly-spread pills that wrap to as many rows as needed */
+    width: 100%;
+    gap: 0.3rem;
+  }
+  nav a {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.82rem;
+  }
 }
 </style>
