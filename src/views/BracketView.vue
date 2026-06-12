@@ -44,6 +44,7 @@ const QUALIFYING_THIRDS = 8
 const order = ref<Record<string, string[]>>({}) // group → team names, finish order
 const thirdsRank = ref<string[]>([]) // group letters, best-third order (top 8 qualify)
 const picks = ref<Record<number, string | null>>({}) // match → chosen winner
+const lastTweak = ref<string[] | null>(null) // human-readable changes from the last Tweak
 
 function seed() {
   if (!data.value) return
@@ -58,6 +59,7 @@ function seed() {
     .map((g) => g.group)
     .sort((a, b) => strengthOf(ord[b][2]) - strengthOf(ord[a][2]))
   picks.value = {}
+  lastTweak.value = null
 }
 
 // Build picks from a winner-side map (0 = team1 advances, 1 = team2), resolving
@@ -147,27 +149,49 @@ function randomize() {
   const sides: Record<number, 0 | 1> = {}
   for (const m of data.value.bracket) sides[m.match_no] = Math.random() < 0.5 ? 1 : 0
   applyState(ord, thirds, basis.value, sides)
+  lastTweak.value = null
 }
 
-// Keep the current prediction but inject a few random upsets.
+// Keep the current prediction but inject a few random upsets, recording each
+// change so the user can see what moved.
 function tweak() {
   if (!data.value) return
+  const changes: string[] = []
   const ord = cloneOrder(order.value)
   const letters = data.value.groups.map((g) => g.group)
   // swap an adjacent pair in 3 random groups
   for (const g of shuffle(letters).slice(0, 3)) {
     const i = Math.floor(Math.random() * 3)
+    const a = ord[g][i]
+    const b = ord[g][i + 1]
     ;[ord[g][i], ord[g][i + 1]] = [ord[g][i + 1], ord[g][i]]
+    changes.push(`Group ${g}: ${a} (#${i + 1}) ↔ ${b} (#${i + 2})`)
   }
-  // nudge the thirds cut by one
+  // swap two random thirds positions (not just adjacent) so it's more likely to
+  // move a team across the top-8 qualify cut
   const thirds = [...thirdsRank.value]
-  const j = Math.floor(Math.random() * (thirds.length - 1))
-  ;[thirds[j], thirds[j + 1]] = [thirds[j + 1], thirds[j]]
+  const j = Math.floor(Math.random() * thirds.length)
+  let k = Math.floor(Math.random() * thirds.length)
+  if (k === j) k = (k + 1) % thirds.length
+  const ga = thirds[j]
+  const gb = thirds[k]
+  ;[thirds[j], thirds[k]] = [thirds[k], thirds[j]]
+  changes.push(`3rd place: ${ord[ga][2]} (#${j + 1}) ↔ ${ord[gb][2]} (#${k + 1})`)
   // flip 3 random knockout results
   const sides = currentSides()
   const nos = data.value.bracket.map((m) => m.match_no)
-  for (const no of shuffle(nos).slice(0, 3)) sides[no] = sides[no] === 1 ? 0 : 1
+  const flipped: { no: number; before: string | null }[] = []
+  for (const no of shuffle(nos).slice(0, 3)) {
+    flipped.push({ no, before: resolved.value.get(no)?.winner ?? null })
+    sides[no] = sides[no] === 1 ? 0 : 1
+  }
   applyState(ord, thirds, basis.value, sides)
+  for (const f of flipped) {
+    const after = resolved.value.get(f.no)?.winner ?? null
+    if (after && after !== f.before)
+      changes.push(`Match ${f.no}: ${after} advances (was ${f.before ?? '—'})`)
+  }
+  lastTweak.value = changes
 }
 
 // On data load: apply a shared code if present, otherwise seed from Elo.
@@ -717,6 +741,16 @@ function slotOrigin(matchNo: number, key: 'team1' | 'team2'): string {
       </div>
       <p v-if="imageError" class="status error">{{ imageError }}</p>
 
+      <div v-if="lastTweak && lastTweak.length" class="tweakbox">
+        <div class="tweakhead">
+          <strong>Last tweak — {{ lastTweak.length }} change{{ lastTweak.length === 1 ? '' : 's' }}</strong>
+          <button class="close" aria-label="Dismiss" @click="lastTweak = null">×</button>
+        </div>
+        <ul>
+          <li v-for="(c, i) in lastTweak" :key="i">{{ c }}</li>
+        </ul>
+      </div>
+
       <!-- ===================== GROUP STAGE ===================== -->
       <template v-if="editing">
       <h3 class="section">Group stage — predicted finish</h3>
@@ -1143,6 +1177,42 @@ h2 {
 .reset-sm {
   padding: 0.3rem 0.6rem;
   font-size: 0.78rem;
+}
+.tweakbox {
+  margin: -0.25rem 0 1rem;
+  border: 1px solid #e5e7eb;
+  border-left: 4px solid #2563eb;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 0.6rem 0.85rem;
+}
+.tweakhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: #111827;
+}
+.tweakhead .close {
+  border: none;
+  background: none;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #6b7280;
+}
+.tweakhead .close:hover {
+  color: #111827;
+}
+.tweakbox ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.82rem;
+  color: #374151;
+}
+.tweakbox li {
+  margin: 0.1rem 0;
+  font-variant-numeric: tabular-nums;
 }
 .hint {
   margin: -0.4rem 0 0.6rem;
