@@ -12,9 +12,20 @@ const props = defineProps<{
   selected?: PlayerPoint | null
   // When true, captains get a dark halo ring so they stand out.
   markCaptains?: boolean
+  // Render scale: 1 = fit container; >1 enlarges the SVG so the wrapper scrolls.
+  zoom?: number
 }>()
 
 const emit = defineEmits<{ select: [PlayerPoint] }>()
+
+// At zoom 1 the SVG stays responsive (max-width 100%); when zoomed it grows past
+// the container so the parent's scroll handles panning.
+const svgStyle = computed(() => {
+  const z = props.zoom ?? 1
+  return z > 1
+    ? { width: `${width * z}px`, maxWidth: 'none' }
+    : {}
+})
 
 // Layout constants
 const MARGIN = { top: 16, right: 18, bottom: 46, left: 56 }
@@ -71,15 +82,18 @@ const isSelected = (p: PlayerPoint) =>
     :viewBox="`0 0 ${width} ${height}`"
     :width="width"
     :height="height"
+    :style="svgStyle"
     class="scatter"
     role="img"
     aria-label="Player scatter plot: caps versus age, colored by position"
   >
     <!-- gridlines + axes -->
     <g class="grid">
+      <!-- horizontal lines let you read each dot's caps off the y axis -->
       <line
         v-for="t in model.yTicks"
         :key="`gy-${t.label}`"
+        class="h"
         :x1="MARGIN.left"
         :x2="MARGIN.left + PLOT_W"
         :y1="t.y"
@@ -88,6 +102,7 @@ const isSelected = (p: PlayerPoint) =>
       <line
         v-for="t in model.xTicks"
         :key="`gx-${t.label}`"
+        class="v"
         :x1="t.x"
         :x2="t.x"
         :y1="MARGIN.top"
@@ -179,13 +194,18 @@ const isSelected = (p: PlayerPoint) =>
   height: auto;
   font-family: system-ui, sans-serif;
 }
-.grid line {
+.grid line.h {
+  stroke: #d1d5db;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+.grid line.v {
   stroke: #f1f5f9;
   stroke-width: 1;
 }
 .axis text {
   font-size: 11px;
-  fill: #6b7280;
+  fill: #4b5563;
 }
 .axis-title {
   font-size: 12px;
