@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useData } from '../composables/useData'
 import { buildPlayerPoints, type PlayerPoint } from '../players'
-import { POSITIONS, posColor } from '../flags'
+import { POSITIONS, posColor, flagUrl } from '../flags'
 import ShirtPositionChart from '../components/ShirtPositionChart.vue'
 
 const { data, error, loading } = useData()
@@ -44,6 +44,23 @@ const filtered = computed(() =>
 
 const visiblePositions = computed(() => POSITIONS.filter((p) => !hidden.value.has(p)))
 
+const selectedNumber = ref<number | null>(null)
+
+// Players wearing the selected number, within the active filters/positions.
+const selectedPlayers = computed(() =>
+  selectedNumber.value == null
+    ? []
+    : filtered.value
+        .filter(
+          (p) => p.shirt_number === selectedNumber.value && visiblePositions.value.includes(p.position),
+        )
+        .sort(
+          (a, b) =>
+            POSITIONS.indexOf(a.position) - POSITIONS.indexOf(b.position) ||
+            a.team.localeCompare(b.team),
+        ),
+)
+
 function togglePos(pos: string) {
   const next = new Set(hidden.value)
   if (next.has(pos)) next.delete(pos)
@@ -57,6 +74,7 @@ function reset() {
   hidden.value = new Set()
   mode.value = 'count'
   captainsOnly.value = false
+  selectedNumber.value = null
 }
 
 const hasFilters = computed(
@@ -129,13 +147,40 @@ const hasFilters = computed(
 
     <p v-if="loading" class="status">Loading data…</p>
     <p v-else-if="error" class="status error">Failed to load data: {{ error }}</p>
-    <ShirtPositionChart
-      v-else
-      :points="filtered"
-      :domain-points="allPoints"
-      :mode="mode"
-      :positions="visiblePositions"
-    />
+    <template v-else>
+      <ShirtPositionChart
+        :points="filtered"
+        :domain-points="allPoints"
+        :mode="mode"
+        :positions="visiblePositions"
+        :selected="selectedNumber"
+        @select="selectedNumber = selectedNumber === $event ? null : $event"
+      />
+
+      <section v-if="selectedNumber != null" class="list-panel">
+        <header class="list-head">
+          <h3>
+            <span class="numtag">#{{ selectedNumber }}</span>
+            {{ selectedPlayers.length }} player{{ selectedPlayers.length === 1 ? '' : 's' }}
+          </h3>
+          <button class="close" aria-label="Close" @click="selectedNumber = null">×</button>
+        </header>
+        <ul v-if="selectedPlayers.length" class="players">
+          <li v-for="p in selectedPlayers" :key="p.team + p.name">
+            <span class="pos" :style="{ background: posColor(p.position) }">{{ p.position }}</span>
+            <img v-if="flagUrl(p.team)" class="flag" :src="flagUrl(p.team)!" :alt="p.team" />
+            <span class="name">
+              {{ p.name }}
+              <span v-if="p.captain" class="cap" title="Captain">(C)</span>
+            </span>
+            <span class="team">{{ p.team }}</span>
+            <span class="grp">Grp {{ p.group }}</span>
+            <span class="caps">{{ p.caps ?? '—' }} caps</span>
+          </li>
+        </ul>
+        <p v-else class="empty">No players wear #{{ selectedNumber }} under the current filters.</p>
+      </section>
+    </template>
   </div>
 </template>
 
@@ -276,5 +321,108 @@ h2 {
 }
 .status.error {
   color: #b91c1c;
+}
+.list-panel {
+  margin-top: 1.25rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.6rem 1rem 0.9rem;
+}
+.list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.list-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.numtag {
+  background: #111827;
+  color: #fff;
+  border-radius: 6px;
+  padding: 0.1rem 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.close {
+  border: none;
+  background: none;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #6b7280;
+}
+.close:hover {
+  color: #111827;
+}
+.players {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.25rem 1.25rem;
+}
+.players li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 0.85rem;
+}
+.pos {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.68rem;
+  border-radius: 4px;
+  padding: 0.1rem 0;
+  flex: none;
+}
+.flag {
+  width: 22px;
+  height: auto;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+  flex: none;
+}
+.name {
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cap {
+  color: #b45309;
+  font-weight: 700;
+  font-size: 0.72rem;
+}
+.team {
+  color: #6b7280;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.grp {
+  color: #9ca3af;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.caps {
+  color: #6b7280;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.empty {
+  margin: 0.6rem 0 0;
+  color: #9ca3af;
 }
 </style>

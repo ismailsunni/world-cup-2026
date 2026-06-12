@@ -12,7 +12,11 @@ const props = defineProps<{
   mode: 'count' | 'percent'
   // Positions to stack (and their bottom-to-top order). Hidden ones are dropped.
   positions: string[]
+  // Currently selected shirt number (its column is highlighted).
+  selected?: number | null
 }>()
+
+const emit = defineEmits<{ select: [number] }>()
 
 // Layout constants
 const MARGIN = { top: 16, right: 18, bottom: 46, left: 52 }
@@ -82,7 +86,8 @@ const model = computed(() => {
         }
       })
       .filter((s): s is NonNullable<typeof s> => s != null)
-    return { number: n, x: MARGIN.left + (x(n) ?? 0) + bw / 2, total, segs }
+    const left = MARGIN.left + (x(n) ?? 0)
+    return { number: n, left, x: left + bw / 2, w: bw, total, segs }
   })
 
   const yTicks = y.ticks(props.mode === 'percent' ? 5 : Math.min(maxTotal, 6)).map((t) => ({
@@ -127,7 +132,26 @@ const model = computed(() => {
     </g>
 
     <!-- stacked bars -->
-    <g v-for="col in model.cols" :key="col.number" class="col">
+    <g
+      v-for="col in model.cols"
+      :key="col.number"
+      class="col"
+      :class="{ sel: selected === col.number }"
+      tabindex="0"
+      role="button"
+      :aria-label="`Shirt number ${col.number}: ${col.total} player${col.total === 1 ? '' : 's'} — show list`"
+      @click="emit('select', col.number)"
+      @keydown.enter.prevent="emit('select', col.number)"
+      @keydown.space.prevent="emit('select', col.number)"
+    >
+      <!-- full-height hit area so empty columns are clickable too -->
+      <rect
+        class="hit"
+        :x="col.left"
+        :y="MARGIN.top"
+        :width="col.w"
+        :height="PLOT_H"
+      />
       <rect
         v-for="seg in col.segs"
         :key="seg.pos"
@@ -185,12 +209,37 @@ const model = computed(() => {
   font-weight: 600;
   fill: #374151;
 }
+.col {
+  cursor: pointer;
+}
+.col:focus {
+  outline: none;
+}
+.hit {
+  fill: transparent;
+}
+.col:hover .hit {
+  fill: #f3f4f6;
+}
+.col.sel .hit {
+  fill: #eff6ff;
+  stroke: #2563eb;
+  stroke-width: 1;
+}
+.col:focus .hit {
+  stroke: #93c5fd;
+  stroke-width: 2;
+}
+.col.sel .xlab {
+  fill: #2563eb;
+  font-weight: 700;
+}
 .seg {
   stroke: #fff;
   stroke-width: 0.75;
   transition: opacity 0.12s ease;
 }
-.seg:hover {
+.col:hover .seg {
   opacity: 0.82;
 }
 </style>
