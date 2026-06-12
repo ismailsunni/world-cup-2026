@@ -711,6 +711,8 @@ function slotOrigin(matchNo: number, key: 'team1' | 'team2'): string {
 .page {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  max-width: 100%;
 }
 h2 {
   margin: 0 0 0.5rem;
@@ -806,6 +808,20 @@ h2 {
 .reset.on {
   border-color: #2563eb;
   color: #2563eb;
+}
+@media (max-width: 640px) {
+  .sub {
+    max-width: none;
+  }
+  .topbar {
+    gap: 0.5rem;
+  }
+  .basis {
+    margin-left: 0;
+  }
+  .champ {
+    flex: 1 1 100%;
+  }
 }
 .sharebox {
   display: flex;
@@ -980,6 +996,10 @@ h2 {
 /* knockout bracket */
 .bracket-scroll {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid #f1f5f9;
   border-radius: 8px;
   padding: 8px 0;

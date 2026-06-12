@@ -26,6 +26,7 @@
   padding: 1.5rem 1rem 3rem;
   font-family: system-ui, sans-serif;
   color: #111827;
+  overflow-x: clip;
 }
 header {
   display: flex;

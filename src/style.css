@@ -4,7 +4,13 @@
 * {
   box-sizing: border-box;
 }
+html,
 body {
   margin: 0;
+  max-width: 100%;
+  /* a stray wide child (e.g. the bracket) must never widen the whole page */
+  overflow-x: hidden;
+}
+body {
   background: #f9fafb;
 }
