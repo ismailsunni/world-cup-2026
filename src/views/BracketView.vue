@@ -549,6 +549,7 @@ const bracketAnalysis = computed(() => {
         )
       : null
   const weakest = pick((b) => b.total, 'min')
+  const strongest = pick((b) => b.total, 'max')
   const competitive = pick((b) => b.stdev, 'min')
   const easiest = pick((b) => b.edge, 'max')
 
@@ -560,9 +561,10 @@ const bracketAnalysis = computed(() => {
   }
   tag(easiest, 'easy')
   tag(competitive, 'comp')
+  tag(strongest, 'strong')
   tag(weakest, 'weak')
 
-  return { brackets, weakest, competitive, easiest, catByMatch }
+  return { brackets, weakest, strongest, competitive, easiest, catByMatch }
 })
 
 // Category colour class for a knockout card (only while the analysis is open).
@@ -915,6 +917,21 @@ function slotOrigin(matchNo: number, key: 'team1' | 'team2'): string {
               />
             </div>
             <p>Four closely-matched sides — no clear favourite for the quarter-final spot.</p>
+          </div>
+
+          <div v-if="bracketAnalysis.strongest" class="acard">
+            <span class="atag strong">Strongest</span>
+            <div class="aflags">
+              <img
+                v-for="t in bracketAnalysis.strongest.teams"
+                :key="t.name"
+                class="flag"
+                :src="flagUrl(t.name) || ''"
+                :alt="t.name"
+                :title="t.name"
+              />
+            </div>
+            <p>Highest combined strength — the toughest four-team group to come through.</p>
           </div>
 
           <div v-if="bracketAnalysis.weakest" class="acard">
@@ -1325,6 +1342,9 @@ h2 {
 .match.cat-weak {
   border-left: 4px solid #64748b;
 }
+.match.cat-strong {
+  border-left: 4px solid #7c3aed;
+}
 .mno {
   display: block;
   font-size: 0.6rem;
@@ -1439,6 +1459,9 @@ h2 {
 .atag.weak {
   background: #64748b;
 }
+.atag.strong {
+  background: #7c3aed;
+}
 .aflags {
   display: flex;
   gap: 0.35rem;
@@ -1489,6 +1512,9 @@ h2 {
 }
 .cdot.cat-weak {
   background: #64748b;
+}
+.cdot.cat-strong {
+  background: #7c3aed;
 }
 .afav {
   font-size: 0.82rem;
