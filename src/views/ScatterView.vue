@@ -15,6 +15,7 @@ const allPoints = computed<PlayerPoint[]>(() =>
 const group = ref('') // '' = all groups
 const country = ref('') // '' = all countries
 const hidden = ref<Set<string>>(new Set()) // positions toggled off via the legend
+const markCaptains = ref(true) // halo on captain dots
 const selected = ref<PlayerPoint | null>(null)
 
 const groups = computed(() =>
@@ -57,11 +58,12 @@ function reset() {
   group.value = ''
   country.value = ''
   hidden.value = new Set()
+  markCaptains.value = true
   selected.value = null
 }
 
 const hasFilters = computed(
-  () => !!group.value || !!country.value || hidden.value.size > 0,
+  () => !!group.value || !!country.value || hidden.value.size > 0 || !markCaptains.value,
 )
 </script>
 
@@ -89,6 +91,14 @@ const hasFilters = computed(
           <option v-for="c in countries" :key="c" :value="c">{{ c }}</option>
         </select>
       </label>
+      <button
+        class="toggle"
+        :class="{ on: markCaptains }"
+        :aria-pressed="markCaptains"
+        @click="markCaptains = !markCaptains"
+      >
+        <span class="cdot" aria-hidden="true" />Mark captains
+      </button>
       <button v-if="hasFilters" class="reset" @click="reset">Reset</button>
       <span class="spacer" />
       <span class="count">{{ filtered.length }} players</span>
@@ -114,6 +124,7 @@ const hasFilters = computed(
         :points="filtered"
         :domain-points="allPoints"
         :selected="selected"
+        :mark-captains="markCaptains"
         @select="selected = $event"
       />
       <PlayerDetail v-if="selected" :player="selected" @close="selected = null" />
@@ -168,6 +179,37 @@ h2 {
 }
 .reset:hover {
   background: #f3f4f6;
+}
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #6b7280;
+}
+.toggle:hover {
+  border-color: #9ca3af;
+}
+.toggle.on {
+  border-color: #111827;
+  color: #111827;
+}
+.cdot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #9ca3af;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px #9ca3af;
+}
+.toggle.on .cdot {
+  background: #2563eb;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px #111827;
 }
 .spacer {
   flex: 1;

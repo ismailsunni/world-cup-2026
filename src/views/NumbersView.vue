@@ -14,6 +14,7 @@ const allPoints = computed<PlayerPoint[]>(() =>
 const group = ref('')
 const country = ref('')
 const mode = ref<'count' | 'percent'>('count')
+const captainsOnly = ref(false)
 const hidden = ref<Set<string>>(new Set())
 
 const groups = computed(() => [...new Set(allPoints.value.map((p) => p.group))].sort())
@@ -36,7 +37,8 @@ const filtered = computed(() =>
   allPoints.value.filter(
     (p) =>
       (!group.value || p.group === group.value) &&
-      (!country.value || p.team === country.value),
+      (!country.value || p.team === country.value) &&
+      (!captainsOnly.value || p.captain),
   ),
 )
 
@@ -54,10 +56,16 @@ function reset() {
   country.value = ''
   hidden.value = new Set()
   mode.value = 'count'
+  captainsOnly.value = false
 }
 
 const hasFilters = computed(
-  () => !!group.value || !!country.value || hidden.value.size > 0 || mode.value !== 'count',
+  () =>
+    !!group.value ||
+    !!country.value ||
+    hidden.value.size > 0 ||
+    mode.value !== 'count' ||
+    captainsOnly.value,
 )
 </script>
 
@@ -93,6 +101,14 @@ const hasFilters = computed(
           <button :class="{ on: mode === 'percent' }" @click="mode = 'percent'">Percent</button>
         </div>
       </div>
+      <button
+        class="toggle"
+        :class="{ on: captainsOnly }"
+        :aria-pressed="captainsOnly"
+        @click="captainsOnly = !captainsOnly"
+      >
+        Captains only
+      </button>
       <button v-if="hasFilters" class="reset" @click="reset">Reset</button>
       <span class="spacer" />
       <span class="count">{{ filtered.length }} players</span>
@@ -191,6 +207,24 @@ h2 {
 }
 .reset:hover {
   background: #f3f4f6;
+}
+.toggle {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #6b7280;
+}
+.toggle:hover {
+  border-color: #9ca3af;
+}
+.toggle.on {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
 }
 .spacer {
   flex: 1;

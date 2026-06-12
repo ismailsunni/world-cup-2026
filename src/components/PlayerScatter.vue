@@ -10,6 +10,8 @@ const props = defineProps<{
   // Full set used to fix the axis domain so it stays stable while filtering.
   domainPoints: PlayerPoint[]
   selected?: PlayerPoint | null
+  // When true, captains get a dark halo ring so they stand out.
+  markCaptains?: boolean
 }>()
 
 const emit = defineEmits<{ select: [PlayerPoint] }>()
@@ -145,9 +147,20 @@ const isSelected = (p: PlayerPoint) =>
       @keydown.space.prevent="emit('select', d.data)"
     >
       <title>
-        {{ d.data.name }} ({{ teamCode(d.data.team) }}) · {{ d.data.position }} ·
-        {{ d.data.age }} yrs · {{ d.data.caps }} caps
+        {{ d.data.name }}{{ d.data.captain ? ' (captain)' : '' }} ({{ teamCode(d.data.team) }}) ·
+        {{ d.data.position }} · {{ d.data.age }} yrs · {{ d.data.caps }} caps
       </title>
+      <!-- captain halo -->
+      <circle
+        v-if="markCaptains && d.data.captain"
+        class="halo"
+        :cx="d.cx"
+        :cy="d.cy"
+        :r="isSelected(d.data) ? 10 : 7.5"
+        fill="none"
+        stroke="#111827"
+        stroke-width="1.5"
+      />
       <circle
         :cx="d.cx"
         :cy="d.cy"
@@ -186,14 +199,18 @@ const isSelected = (p: PlayerPoint) =>
   fill-opacity: 0.72;
   transition: r 0.12s ease;
 }
-.dot:hover circle {
+.dot .halo {
+  fill-opacity: 0;
+  pointer-events: none;
+}
+.dot:hover circle:not(.halo) {
   fill-opacity: 1;
   r: 7;
 }
 .dot:focus {
   outline: none;
 }
-.dot:focus circle {
+.dot:focus circle:not(.halo) {
   stroke: #111827;
   stroke-width: 2;
 }
