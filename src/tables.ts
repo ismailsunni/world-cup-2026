@@ -1,4 +1,5 @@
 import type { WorldCup } from './types'
+import { posColor } from './flags'
 
 export interface Column {
   key: string
@@ -6,6 +7,8 @@ export interface Column {
   numeric?: boolean
   bool?: boolean
   filter?: boolean // render a dropdown filter for this (enumerable) column
+  /** When set, the cell value renders as a chip filled with this color. */
+  colorBy?: (value: unknown) => string
 }
 
 const mean = (xs: number[]): number | null =>
@@ -31,7 +34,7 @@ export const COUNTRY_COLUMNS: Column[] = [
 export const PLAYER_COLUMNS: Column[] = [
   { key: 'shirt_number', label: '#', numeric: true },
   { key: 'player_name', label: 'Player' },
-  { key: 'position', label: 'Pos', filter: true },
+  { key: 'position', label: 'Pos', filter: true, colorBy: (v) => posColor(String(v)) },
   { key: 'team', label: 'Team', filter: true },
   { key: 'group', label: 'Group', filter: true },
   { key: 'age', label: 'Age', numeric: true },

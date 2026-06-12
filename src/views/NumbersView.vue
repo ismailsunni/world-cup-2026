@@ -2,8 +2,10 @@
 import { computed, ref, watch } from 'vue'
 import { useData } from '../composables/useData'
 import { buildPlayerPoints, type PlayerPoint } from '../players'
-import { POSITIONS, posColor, flagUrl } from '../flags'
+import { POSITIONS, posColor } from '../flags'
 import ShirtPositionChart from '../components/ShirtPositionChart.vue'
+import DataTable from '../components/DataTable.vue'
+import { PLAYER_COLUMNS } from '../tables'
 
 const { data, error, loading } = useData()
 
@@ -59,6 +61,22 @@ const selectedPlayers = computed(() =>
             POSITIONS.indexOf(a.position) - POSITIONS.indexOf(b.position) ||
             a.team.localeCompare(b.team),
         ),
+)
+
+// Drop the redundant "#" column — every row shares the selected number.
+const listColumns = PLAYER_COLUMNS.filter((c) => c.key !== 'shirt_number')
+const selectedRows = computed(() =>
+  selectedPlayers.value.map((p) => ({
+    player_name: p.name,
+    position: p.position,
+    team: p.team,
+    group: p.group,
+    age: p.age,
+    caps: p.caps,
+    goals: p.goals,
+    captain: p.captain,
+    club: p.club,
+  })),
 )
 
 function togglePos(pos: string) {
@@ -165,19 +183,12 @@ const hasFilters = computed(
           </h3>
           <button class="close" aria-label="Close" @click="selectedNumber = null">×</button>
         </header>
-        <ul v-if="selectedPlayers.length" class="players">
-          <li v-for="p in selectedPlayers" :key="p.team + p.name">
-            <span class="pos" :style="{ background: posColor(p.position) }">{{ p.position }}</span>
-            <img v-if="flagUrl(p.team)" class="flag" :src="flagUrl(p.team)!" :alt="p.team" />
-            <span class="name">
-              {{ p.name }}
-              <span v-if="p.captain" class="cap" title="Captain">(C)</span>
-            </span>
-            <span class="team">{{ p.team }}</span>
-            <span class="grp">Grp {{ p.group }}</span>
-            <span class="caps">{{ p.caps ?? '—' }} caps</span>
-          </li>
-        </ul>
+        <DataTable
+          v-if="selectedPlayers.length"
+          :columns="listColumns"
+          :rows="selectedRows"
+          hide-controls
+        />
         <p v-else class="empty">No players wear #{{ selectedNumber }} under the current filters.</p>
       </section>
     </template>
@@ -359,67 +370,8 @@ h2 {
 .close:hover {
   color: #111827;
 }
-.players {
-  list-style: none;
-  margin: 0.6rem 0 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 0.25rem 1.25rem;
-}
-.players li {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.3rem 0;
-  border-bottom: 1px solid #f1f5f9;
-  font-size: 0.85rem;
-}
-.pos {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  color: #fff;
-  font-weight: 700;
-  font-size: 0.68rem;
-  border-radius: 4px;
-  padding: 0.1rem 0;
-  flex: none;
-}
-.flag {
-  width: 22px;
-  height: auto;
-  border-radius: 2px;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
-  flex: none;
-}
-.name {
-  font-weight: 600;
-  color: #111827;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cap {
-  color: #b45309;
-  font-weight: 700;
-  font-size: 0.72rem;
-}
-.team {
-  color: #6b7280;
-  margin-left: auto;
-  white-space: nowrap;
-}
-.grp {
-  color: #9ca3af;
-  font-size: 0.75rem;
-  white-space: nowrap;
-}
-.caps {
-  color: #6b7280;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+.list-panel :deep(.dt) {
+  margin-top: 0.6rem;
 }
 .empty {
   margin: 0.6rem 0 0;

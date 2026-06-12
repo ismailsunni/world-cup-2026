@@ -124,7 +124,14 @@ function cell(c: Column, v: unknown): string {
         <tbody>
           <tr v-for="(r, i) in view" :key="i">
             <td v-for="c in columns" :key="c.key" :class="{ num: c.numeric, bool: c.bool }">
-              {{ cell(c, r[c.key]) }}
+              <span
+                v-if="c.colorBy && r[c.key] != null && r[c.key] !== ''"
+                class="chip"
+                :style="{ background: c.colorBy(r[c.key]) }"
+              >
+                {{ cell(c, r[c.key]) }}
+              </span>
+              <template v-else>{{ cell(c, r[c.key]) }}</template>
             </td>
           </tr>
           <tr v-if="!view.length">
@@ -240,6 +247,17 @@ th.num {
 td.bool {
   text-align: center;
   color: #16a34a;
+}
+.chip {
+  display: inline-block;
+  min-width: 1.8rem;
+  text-align: center;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
 }
 tbody tr:hover {
   background: #f9fafb;
