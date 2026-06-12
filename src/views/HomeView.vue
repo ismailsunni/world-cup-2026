@@ -85,54 +85,53 @@ function onSelectGroup(g: string) {
   />
 
   <section v-if="insights" class="insights" aria-label="Group findings">
-    <button
-      v-if="insights.mostCompetitive"
-      class="card"
-      @click="onSelectGroup(insights.mostCompetitive.group)"
-    >
+    <div class="card">
       <span class="tag competitive">Most competitive</span>
-      <span class="grp">Group {{ insights.mostCompetitive.group }}</span>
-      <span class="desc">
-        Tightest race — all four within
-        {{ val(insights.mostCompetitive.range) }}
-        ({{ val(insights.mostCompetitive.min) }}–{{ val(insights.mostCompetitive.max) }}).
-      </span>
-      <span class="fig">σ {{ num(insights.mostCompetitive.stdev) }}</span>
-    </button>
+      <p class="cardsub">Smallest spread — all four bunched together.</p>
+      <ul class="rows">
+        <li v-for="s in insights.competitive" :key="s.group">
+          <button class="row" @click="onSelectGroup(s.group)">
+            <span class="grp">{{ s.group }}</span>
+            <span class="rowdesc">{{ val(s.min) }}–{{ val(s.max) }}</span>
+            <span class="fig">σ {{ num(s.stdev) }}</span>
+          </button>
+        </li>
+      </ul>
+    </div>
 
-    <button
-      v-if="insights.mostOneSided"
-      class="card"
-      @click="onSelectGroup(insights.mostOneSided.group)"
-    >
-      <span class="tag onesided">Most one-sided</span>
-      <span class="grp">Group {{ insights.mostOneSided.group }}</span>
-      <span class="desc">
-        <template v-if="insights.mostOneSided.oneSidedKind === 'leader'">
-          <strong>{{ insights.mostOneSided.bestTeam }}</strong> runs away from the pack
-          ({{ val(insights.mostOneSided.leaderGap) }} clear of the rest).
-        </template>
-        <template v-else>
-          <strong>{{ insights.mostOneSided.worstTeam }}</strong> is adrift at the bottom
-          ({{ val(insights.mostOneSided.trailerGap) }} behind the rest).
-        </template>
-      </span>
-      <span class="fig">{{ Math.round(insights.mostOneSided.oneSidedRatio * 100) }}% of spread</span>
-    </button>
+    <div class="card">
+      <span class="tag onesided">One-sided</span>
+      <p class="cardsub">One team far ahead of, or adrift from, the other three.</p>
+      <ul v-if="insights.oneSided.length" class="rows">
+        <li v-for="s in insights.oneSided" :key="s.group">
+          <button class="row" @click="onSelectGroup(s.group)">
+            <span class="grp">{{ s.group }}</span>
+            <span class="rowdesc">
+              <strong>{{ s.outlierTeam }}</strong>
+              {{ s.outlierKind === 'leader' ? 'runs clear' : 'adrift' }}
+              ({{ num(s.outlierGap) }} gap)
+            </span>
+            <span class="fig">{{ Math.round(s.dominance * 100) }}%</span>
+          </button>
+        </li>
+      </ul>
+      <p v-else class="none">No group stands clearly apart.</p>
+    </div>
 
-    <button
-      v-if="insights.mostSplit"
-      class="card"
-      @click="onSelectGroup(insights.mostSplit.group)"
-    >
-      <span class="tag split">Clearest top-2 / bottom-2</span>
-      <span class="grp">Group {{ insights.mostSplit.group }}</span>
-      <span class="desc">
-        A clean 2-2 split — {{ val(insights.mostSplit.midGap) }} separates the top two
-        from the bottom two.
-      </span>
-      <span class="fig">{{ Math.round(insights.mostSplit.splitRatio * 100) }}% of spread</span>
-    </button>
+    <div class="card">
+      <span class="tag split">Top-2 / bottom-2</span>
+      <p class="cardsub">A clean break between the top two and bottom two.</p>
+      <ul v-if="insights.split.length" class="rows">
+        <li v-for="s in insights.split" :key="s.group">
+          <button class="row" @click="onSelectGroup(s.group)">
+            <span class="grp">{{ s.group }}</span>
+            <span class="rowdesc">{{ num(s.midGap) }} between the pairs</span>
+            <span class="fig">{{ Math.round(s.dominance * 100) }}%</span>
+          </button>
+        </li>
+      </ul>
+      <p v-else class="none">No clean 2-2 split.</p>
+    </div>
   </section>
 
   <section v-if="groupName" class="group-panel">
@@ -219,24 +218,13 @@ function onSelectGroup(g: string) {
   margin-top: 1.25rem;
 }
 .card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.3rem;
-  text-align: left;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   background: #fff;
   padding: 0.8rem 0.9rem;
-  cursor: pointer;
-  font: inherit;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
-}
-.card:hover {
-  border-color: #9ca3af;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 .tag {
+  display: inline-block;
   font-size: 0.68rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -254,22 +242,69 @@ function onSelectGroup(g: string) {
 .tag.split {
   background: #7c3aed;
 }
-.grp {
-  font-size: 1.15rem;
-  font-weight: 800;
-  color: #111827;
+.cardsub {
+  margin: 0.4rem 0 0.5rem;
+  font-size: 0.78rem;
+  color: #6b7280;
+  line-height: 1.3;
 }
-.desc {
-  font-size: 0.85rem;
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  padding: 0.3rem 0.35rem;
+  border-radius: 6px;
+}
+.row:hover {
+  background: #f3f4f6;
+}
+.grp {
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: #111827;
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.82rem;
+}
+.rowdesc {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.82rem;
   color: #374151;
-  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .fig {
-  margin-top: 0.1rem;
+  flex: none;
   font-size: 0.78rem;
   font-weight: 700;
   color: #6b7280;
   font-variant-numeric: tabular-nums;
+}
+.none {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #9ca3af;
 }
 .group-panel {
   margin-top: 1.5rem;
