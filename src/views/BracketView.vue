@@ -505,6 +505,54 @@ function moveTeam(group: string, i: number, dir: -1 | 1) {
 function moveThird(i: number, dir: -1 | 1) {
   thirdsRank.value = reorder(thirdsRank.value, i, dir)
 }
+
+// --- drag & drop reordering (group lists + the thirds list) ------------------
+type DragKind = 'group' | 'thirds'
+const drag = ref<{ kind: DragKind; group: string; index: number } | null>(null)
+const dragOver = ref<string | null>(null) // `${kind}:${group}:${index}` being hovered
+
+function moveIn(arr: string[], from: number, to: number): string[] {
+  const a = [...arr]
+  const [item] = a.splice(from, 1)
+  a.splice(to, 0, item)
+  return a
+}
+function onDragStart(kind: DragKind, group: string, index: number, e: DragEvent) {
+  drag.value = { kind, group, index }
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(index)) // Firefox needs payload
+  }
+}
+function onDragOver(kind: DragKind, group: string, index: number, e: DragEvent) {
+  const d = drag.value
+  if (!d || d.kind !== kind || (kind === 'group' && d.group !== group)) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  dragOver.value = `${kind}:${group}:${index}`
+}
+function onDrop(kind: DragKind, group: string, index: number) {
+  const d = drag.value
+  dragOver.value = null
+  drag.value = null
+  if (!d || d.kind !== kind) return
+  if (kind === 'group') {
+    if (d.group !== group || d.index === index) return
+    order.value = { ...order.value, [group]: moveIn(order.value[group], d.index, index) }
+  } else {
+    if (d.index === index) return
+    thirdsRank.value = moveIn(thirdsRank.value, d.index, index)
+  }
+}
+function onDragEnd() {
+  drag.value = null
+  dragOver.value = null
+}
+const isDragging = (kind: DragKind, group: string, i: number) =>
+  drag.value?.kind === kind && drag.value.group === group && drag.value.index === i
+const isDropping = (kind: DragKind, group: string, i: number) =>
+  dragOver.value === `${kind}:${group}:${i}`
+
 function pickWinner(matchNo: number, team: string | null) {
   if (!team) return
   picks.value = { ...picks.value, [matchNo]: team }
@@ -588,10 +636,28 @@ function slotOrigin(matchNo: number, key: 'team1' | 'team2'): string {
             <li
               v-for="(team, i) in order[g]"
               :key="team"
-              :class="{ q: i < 2, third: i === 2, out: i === 3 }"
+              draggable="true"
+              :class="{
+                q: i < 2,
+                third: i === 2,
+                out: i === 3,
+                dragging: isDragging('group', g, i),
+                dropping: isDropping('group', g, i),
+              }"
+              @dragstart="onDragStart('group', g, i, $event)"
+              @dragover="onDragOver('group', g, i, $event)"
+              @drop.prevent="onDrop('group', g, i)"
+              @dragend="onDragEnd"
             >
+              <span class="handle" aria-hidden="true">⠿</span>
               <span class="rank">{{ posLabel(i) }}</span>
-              <img v-if="flagUrl(team)" class="flag" :src="flagUrl(team)!" :alt="team" />
+              <img
+                v-if="flagUrl(team)"
+                class="flag"
+                :src="flagUrl(team)!"
+                :alt="team"
+                draggable="false"
+              />
               <span class="tname">{{ team }}</span>
               <span class="elo">{{ seedVal(team) }}</span>
               <span class="badge">
@@ -615,11 +681,28 @@ function slotOrigin(matchNo: number, key: 'team1' | 'team2'): string {
         <li
           v-for="(t, i) in thirdsList"
           :key="t.group"
-          :class="{ q: t.qualifies, cut: i === QUALIFYING_THIRDS - 1 }"
+          draggable="true"
+          :class="{
+            q: t.qualifies,
+            cut: i === QUALIFYING_THIRDS - 1,
+            dragging: isDragging('thirds', '', i),
+            dropping: isDropping('thirds', '', i),
+          }"
+          @dragstart="onDragStart('thirds', '', i, $event)"
+          @dragover="onDragOver('thirds', '', i, $event)"
+          @drop.prevent="onDrop('thirds', '', i)"
+          @dragend="onDragEnd"
         >
+          <span class="handle" aria-hidden="true">⠿</span>
           <span class="rank">{{ i + 1 }}</span>
           <span class="gtag">{{ t.group }}</span>
-          <img v-if="flagUrl(t.team)" class="flag" :src="flagUrl(t.team)!" :alt="t.team" />
+          <img
+            v-if="flagUrl(t.team)"
+            class="flag"
+            :src="flagUrl(t.team)!"
+            :alt="t.team"
+            draggable="false"
+          />
           <span class="tname">{{ t.team }}</span>
           <span class="elo">{{ seedVal(t.team) }}</span>
           <span class="badge">{{ t.qualifies ? 'Qualifies' : 'Out' }}</span>
@@ -888,6 +971,31 @@ h2 {
   padding: 0.28rem 0.3rem;
   border-radius: 6px;
   font-size: 0.85rem;
+  cursor: grab;
+  user-select: none;
+}
+.gcard li:active,
+.thirds li:active {
+  cursor: grabbing;
+}
+.gcard li.dragging,
+.thirds li.dragging {
+  opacity: 0.4;
+}
+.gcard li.dropping,
+.thirds li.dropping {
+  box-shadow: inset 0 2px 0 #2563eb;
+}
+.handle {
+  flex: none;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: grab;
+}
+.gcard li:hover .handle,
+.thirds li:hover .handle {
+  color: #9ca3af;
 }
 .gcard li.q {
   background: #f0fdf4;
