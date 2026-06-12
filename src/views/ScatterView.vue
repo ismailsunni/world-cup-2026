@@ -18,16 +18,6 @@ const hidden = ref<Set<string>>(new Set()) // positions toggled off via the lege
 const markCaptains = ref(true) // halo on captain dots
 const selected = ref<PlayerPoint | null>(null)
 
-const ZOOM_STEP = 1.5
-const ZOOM_MAX = 6
-const zoom = ref(1)
-function zoomIn() {
-  zoom.value = Math.min(ZOOM_MAX, Math.round(zoom.value * ZOOM_STEP * 100) / 100)
-}
-function zoomOut() {
-  zoom.value = Math.max(1, Math.round((zoom.value / ZOOM_STEP) * 100) / 100)
-}
-
 const groups = computed(() =>
   [...new Set(allPoints.value.map((p) => p.group))].sort(),
 )
@@ -70,7 +60,6 @@ function reset() {
   hidden.value = new Set()
   markCaptains.value = true
   selected.value = null
-  zoom.value = 1
 }
 
 const hasFilters = computed(
@@ -131,25 +120,14 @@ const hasFilters = computed(
     <p v-if="loading" class="status">Loading data…</p>
     <p v-else-if="error" class="status error">Failed to load data: {{ error }}</p>
     <template v-else>
-      <div class="plot-toolbar">
-        <div class="zoom" role="group" aria-label="Zoom">
-          <button aria-label="Zoom out" :disabled="zoom <= 1" @click="zoomOut">−</button>
-          <span class="zlevel">{{ Math.round(zoom * 100) }}%</span>
-          <button aria-label="Zoom in" :disabled="zoom >= ZOOM_MAX" @click="zoomIn">+</button>
-          <button class="zreset" :disabled="zoom === 1" @click="zoom = 1">Reset</button>
-        </div>
-        <span v-if="zoom > 1" class="zhint">scroll to pan</span>
-      </div>
-      <div class="plot-wrap">
-        <PlayerScatter
-          :points="filtered"
-          :domain-points="allPoints"
-          :selected="selected"
-          :mark-captains="markCaptains"
-          :zoom="zoom"
-          @select="selected = $event"
-        />
-      </div>
+      <p class="zhint">Drag a box to zoom · scroll to zoom · double-click to reset</p>
+      <PlayerScatter
+        :points="filtered"
+        :domain-points="allPoints"
+        :selected="selected"
+        :mark-captains="markCaptains"
+        @select="selected = $event"
+      />
       <PlayerDetail v-if="selected" :player="selected" @close="selected = null" />
     </template>
   </div>
@@ -278,56 +256,10 @@ h2 {
   border-radius: 3px;
   display: inline-block;
 }
-.plot-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-bottom: 0.4rem;
-}
-.zoom {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-.zoom button {
-  min-width: 2rem;
-  padding: 0.3rem 0.55rem;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: #fff;
-  cursor: pointer;
-  font-size: 0.95rem;
-  font-weight: 700;
-  line-height: 1;
-  color: #374151;
-}
-.zoom button.zreset {
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-.zoom button:hover:not(:disabled) {
-  background: #f3f4f6;
-  border-color: #9ca3af;
-}
-.zoom button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-.zlevel {
-  min-width: 3rem;
-  text-align: center;
-  font-size: 0.82rem;
-  font-variant-numeric: tabular-nums;
-  color: #6b7280;
-}
 .zhint {
+  margin: 0 0 0.4rem;
   font-size: 0.78rem;
   color: #9ca3af;
-}
-.plot-wrap {
-  overflow: auto;
-  border: 1px solid #f1f5f9;
-  border-radius: 8px;
 }
 .status {
   color: #6b7280;
