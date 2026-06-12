@@ -6,6 +6,8 @@ import { posColor } from '../flags'
 
 const props = defineProps<{
   points: PlayerPoint[]
+  // Full set used to fix the x axis (shirt numbers) so empty columns still show.
+  domainPoints: PlayerPoint[]
   // 'count' = absolute players; 'percent' = 100%-stacked share per number.
   mode: 'count' | 'percent'
   // Positions to stack (and their bottom-to-top order). Hidden ones are dropped.
@@ -20,10 +22,11 @@ const width = MARGIN.left + PLOT_W + MARGIN.right
 const height = MARGIN.top + PLOT_H + MARGIN.bottom
 
 const model = computed(() => {
-  // numbers present in the data, ascending
+  // All shirt numbers across the full dataset, ascending — kept on the axis even
+  // when the active filter leaves some of them with no players (empty columns).
   const numbers = [
     ...new Set(
-      props.points
+      props.domainPoints
         .map((p) => p.shirt_number)
         .filter((n): n is number => n != null),
     ),

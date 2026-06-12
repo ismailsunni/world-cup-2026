@@ -132,6 +132,7 @@ const hasFilters = computed(
     <ShirtPositionChart
       v-else
       :points="filtered"
+      :domain-points="allPoints"
       :mode="mode"
       :positions="visiblePositions"
     />
