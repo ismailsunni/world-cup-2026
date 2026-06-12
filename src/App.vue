@@ -9,6 +9,7 @@
       <nav>
         <router-link to="/">Group Analytics</router-link>
         <router-link to="/scatter">Player Chart</router-link>
+        <router-link to="/numbers">Squad Numbers</router-link>
         <router-link to="/teams">Teams</router-link>
         <router-link to="/players">Players</router-link>
       </nav>
