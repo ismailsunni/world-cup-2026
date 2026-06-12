@@ -60,22 +60,18 @@ function seed() {
   picks.value = {}
 }
 
-// Rebuild the prediction from a shared code (?p=...). Returns false if invalid.
-let applying = false
-function applyShare(code: string): boolean {
-  if (!data.value) return false
-  const nos = data.value.bracket.map((m) => m.match_no)
-  const dec = decodeShare(code, data.value.groups, nos)
-  if (!dec) return false
-  applying = true
-  basis.value = dec.basis
-  order.value = dec.order
-  thirdsRank.value = dec.thirdsRank
-  // Rebuild picks from the encoded winner-sides.
-  const r1 = Object.fromEntries(Object.entries(dec.order).map(([g, ts]) => [g, ts[0]]))
-  const r2 = Object.fromEntries(Object.entries(dec.order).map(([g, ts]) => [g, ts[1]]))
-  const qual = dec.thirdsRank.slice(0, QUALIFYING_THIRDS)
-  const tbg = Object.fromEntries(qual.map((g) => [g, dec.order[g][2]]))
+// Build picks from a winner-side map (0 = team1 advances, 1 = team2), resolving
+// matches in order so each side maps to a concrete team.
+function rebuildPicks(
+  ord: Record<string, string[]>,
+  thirds: string[],
+  sides: Record<number, 0 | 1>,
+): Record<number, string | null> {
+  if (!data.value) return {}
+  const r1 = Object.fromEntries(Object.entries(ord).map(([g, ts]) => [g, ts[0]]))
+  const r2 = Object.fromEntries(Object.entries(ord).map(([g, ts]) => [g, ts[1]]))
+  const qual = thirds.slice(0, QUALIFYING_THIRDS)
+  const tbg = Object.fromEntries(qual.map((g) => [g, ord[g][2]]))
   const alloc = allocateThirds(parseThirdSlots(data.value.bracket), qual)
   const res = resolveBracket({
     bracket: data.value.bracket,
@@ -85,15 +81,93 @@ function applyShare(code: string): boolean {
     thirdAlloc: alloc,
     picks: {},
     strength: () => 0,
-    decide: (t1, t2, no) => (dec.sides[no] === 1 ? t2 : t1),
+    decide: (t1, t2, no) => (sides[no] === 1 ? t2 : t1),
   })
   const np: Record<number, string | null> = {}
   res.forEach((r, no) => {
     if (r.winner) np[no] = r.winner
   })
-  picks.value = np
+  return np
+}
+
+let applying = false
+function applyState(
+  ord: Record<string, string[]>,
+  thirds: string[],
+  basisVal: 'elo' | 'fifa',
+  sides: Record<number, 0 | 1>,
+) {
+  applying = true
+  basis.value = basisVal
+  order.value = ord
+  thirdsRank.value = thirds
+  picks.value = rebuildPicks(ord, thirds, sides)
   applying = false
+}
+
+// Rebuild the prediction from a shared code (?p=...). Returns false if invalid.
+function applyShare(code: string): boolean {
+  if (!data.value) return false
+  const nos = data.value.bracket.map((m) => m.match_no)
+  const dec = decodeShare(code, data.value.groups, nos)
+  if (!dec) return false
+  applyState(dec.order, dec.thirdsRank, dec.basis, dec.sides)
   return true
+}
+
+// The winner-side of every knockout match in the current bracket.
+function currentSides(): Record<number, 0 | 1> {
+  const sides: Record<number, 0 | 1> = {}
+  if (!data.value) return sides
+  for (const m of data.value.bracket) {
+    const r = resolved.value.get(m.match_no)
+    sides[m.match_no] = r && r.winner && r.team2 && r.winner === r.team2 ? 1 : 0
+  }
+  return sides
+}
+
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+const cloneOrder = (o: Record<string, string[]>) =>
+  Object.fromEntries(Object.entries(o).map(([g, a]) => [g, [...a]]))
+
+// Fully random prediction: shuffle every group, the thirds order, and coin-flip
+// each knockout match.
+function randomize() {
+  if (!data.value) return
+  const ord: Record<string, string[]> = {}
+  for (const g of data.value.groups) ord[g.group] = shuffle(g.teams.map((t) => t.team))
+  const thirds = shuffle(data.value.groups.map((g) => g.group))
+  const sides: Record<number, 0 | 1> = {}
+  for (const m of data.value.bracket) sides[m.match_no] = Math.random() < 0.5 ? 1 : 0
+  applyState(ord, thirds, basis.value, sides)
+}
+
+// Keep the current prediction but inject a few random upsets.
+function tweak() {
+  if (!data.value) return
+  const ord = cloneOrder(order.value)
+  const letters = data.value.groups.map((g) => g.group)
+  // swap an adjacent pair in 3 random groups
+  for (const g of shuffle(letters).slice(0, 3)) {
+    const i = Math.floor(Math.random() * 3)
+    ;[ord[g][i], ord[g][i + 1]] = [ord[g][i + 1], ord[g][i]]
+  }
+  // nudge the thirds cut by one
+  const thirds = [...thirdsRank.value]
+  const j = Math.floor(Math.random() * (thirds.length - 1))
+  ;[thirds[j], thirds[j + 1]] = [thirds[j + 1], thirds[j]]
+  // flip 3 random knockout results
+  const sides = currentSides()
+  const nos = data.value.bracket.map((m) => m.match_no)
+  for (const no of shuffle(nos).slice(0, 3)) sides[no] = sides[no] === 1 ? 0 : 1
+  applyState(ord, thirds, basis.value, sides)
 }
 
 // On data load: apply a shared code if present, otherwise seed from Elo.
@@ -119,15 +193,10 @@ const editing = ref(false)
 const shareUrl = ref('')
 const copied = ref(false)
 function makeShareLink() {
-  if (!data.value || !geometry.value) return
+  if (!data.value) return
   const nos = data.value.bracket.map((m) => m.match_no)
-  const sides: Record<number, 0 | 1> = {}
-  for (const no of nos) {
-    const r = resolved.value.get(no)
-    sides[no] = r && r.winner && r.team2 && r.winner === r.team2 ? 1 : 0
-  }
   const code = encodeShare(
-    { basis: basis.value, order: order.value, thirdsRank: thirdsRank.value, sides },
+    { basis: basis.value, order: order.value, thirdsRank: thirdsRank.value, sides: currentSides() },
     data.value.groups,
     nos,
   )
@@ -141,6 +210,155 @@ function makeShareLink() {
     },
     () => {},
   )
+}
+
+// --- export to image (flags only) -------------------------------------------
+const imageError = ref('')
+async function generateImage() {
+  if (!data.value || !layout.value) return
+  imageError.value = ''
+  const lay = layout.value
+  const res = resolved.value
+  const bracket = data.value.bracket
+  const byNo = new Map(bracket.map((m) => [m.match_no, m]))
+
+  const M = { top: 56, left: 14, right: 168, bottom: 40 }
+  const COLW = 88
+  const ROW = 46
+  const FW = 34
+  const FH = 22
+  const CW = FW + 12
+  const cols = COLUMN_ROUNDS
+  const colIndex = (r: string) => {
+    const i = cols.indexOf(r)
+    return i === -1 ? cols.length - 1 : i
+  }
+  const cardX = (ri: number) => M.left + ri * COLW
+  const cardYc = (no: number) => M.top + (lay.pos(no) + 0.5) * ROW
+  const plotH = lay.leafOrder.length * ROW
+  const W = M.left + cols.length * COLW + M.right
+  const H = M.top + plotH + M.bottom
+  const champ = res.get(lay.root)?.winner ?? null
+
+  // preload the flags we'll draw (CORS so the canvas isn't tainted)
+  const need = new Set<string>()
+  for (const m of bracket)
+    for (const k of ['team1', 'team2'] as const) {
+      const t = res.get(m.match_no)?.[k]
+      if (t && flagUrl(t)) need.add(t)
+    }
+  const imgs = new Map<string, HTMLImageElement>()
+  await Promise.all(
+    [...need].map(
+      (t) =>
+        new Promise<void>((resolve) => {
+          const im = new Image()
+          im.crossOrigin = 'anonymous'
+          im.onload = () => {
+            imgs.set(t, im)
+            resolve()
+          }
+          im.onerror = () => resolve()
+          im.src = flagUrl(t, 80)!
+        }),
+    ),
+  )
+
+  const scale = 2
+  const cv = document.createElement('canvas')
+  cv.width = W * scale
+  cv.height = H * scale
+  const ctx = cv.getContext('2d')!
+  ctx.scale(scale, scale)
+  ctx.fillStyle = '#fff'
+  ctx.fillRect(0, 0, W, H)
+
+  ctx.textBaseline = 'alphabetic'
+  ctx.textAlign = 'left'
+  ctx.fillStyle = '#111827'
+  ctx.font = '700 16px system-ui, sans-serif'
+  ctx.fillText('World Cup 2026 — Predicted Bracket', M.left, 24)
+  ctx.fillStyle = '#6b7280'
+  ctx.font = '12px system-ui, sans-serif'
+  ctx.fillText(`Seeded by ${BASIS_LABEL[basis.value]}`, M.left, 42)
+
+  ctx.fillStyle = '#9ca3af'
+  ctx.font = '700 9px system-ui, sans-serif'
+  cols.forEach((r, ri) => ctx.fillText(r.toUpperCase(), cardX(ri), M.top - 8))
+
+  // connectors
+  ctx.strokeStyle = '#d1d5db'
+  ctx.lineWidth = 1
+  for (const m of bracket) {
+    if (m.feeds_into == null || !byNo.has(m.feeds_into)) continue
+    const x1 = cardX(colIndex(m.round)) + CW
+    const y1 = cardYc(m.match_no)
+    const x2 = cardX(colIndex(byNo.get(m.feeds_into)!.round))
+    const y2 = cardYc(m.feeds_into)
+    const midX = (x1 + x2) / 2
+    ctx.beginPath()
+    ctx.moveTo(x1, y1)
+    ctx.lineTo(midX, y1)
+    ctx.lineTo(midX, y2)
+    ctx.lineTo(x2, y2)
+    ctx.stroke()
+  }
+
+  const drawFlag = (t: string | null, x: number, y: number, win: boolean) => {
+    if (win) {
+      ctx.fillStyle = '#dcfce7'
+      ctx.strokeStyle = '#16a34a'
+      ctx.lineWidth = 1.5
+      ctx.fillRect(x - 1, y - 2, CW, FH + 4)
+      ctx.strokeRect(x - 1, y - 2, CW, FH + 4)
+    }
+    ctx.globalAlpha = t && !win ? 0.5 : 1
+    const fx = x + (CW - FW) / 2
+    const im = t ? imgs.get(t) : null
+    if (im) ctx.drawImage(im, fx, y, FW, FH)
+    else {
+      ctx.fillStyle = '#e5e7eb'
+      ctx.fillRect(fx, y, FW, FH)
+    }
+    ctx.globalAlpha = 1
+  }
+
+  for (const m of bracket) {
+    if (m.match_no === lay.root) continue // final drawn as champion block too
+    const r = res.get(m.match_no)
+    const x = cardX(colIndex(m.round))
+    const yc = cardYc(m.match_no)
+    drawFlag(r?.team1 ?? null, x, yc - FH - 3, !!r?.winner && r?.team1 === r?.winner)
+    drawFlag(r?.team2 ?? null, x, yc + 3, !!r?.winner && r?.team2 === r?.winner)
+  }
+  // final + champion block on the right
+  {
+    const r = res.get(lay.root)
+    const x = cardX(cols.length - 1)
+    const yc = cardYc(lay.root)
+    drawFlag(r?.team1 ?? null, x, yc - FH - 3, !!r?.winner && r?.team1 === r?.winner)
+    drawFlag(r?.team2 ?? null, x, yc + 3, !!r?.winner && r?.team2 === r?.winner)
+    const cx = x + CW + 22
+    ctx.fillStyle = '#b45309'
+    ctx.font = '700 10px system-ui, sans-serif'
+    ctx.fillText('CHAMPION', cx, yc - FH)
+    const cim = champ ? imgs.get(champ) : null
+    if (cim) ctx.drawImage(cim, cx, yc - FH + 6, FW * 1.6, FH * 1.6)
+    ctx.fillStyle = '#111827'
+    ctx.font = '700 14px system-ui, sans-serif'
+    ctx.fillText(champ ?? '—', cx + (cim ? FW * 1.6 + 8 : 0), yc + 6)
+  }
+
+  try {
+    const url = cv.toDataURL('image/jpeg', 0.92)
+    const a = document.createElement('a')
+    a.download = 'wc2026-bracket.jpg'
+    a.href = url
+    a.click()
+  } catch {
+    imageError.value =
+      'Could not export the image — the flag CDN blocked canvas access in this browser.'
+  }
 }
 
 // --- derived standings -------------------------------------------------------
@@ -289,7 +507,10 @@ function descOf(m: { team1_desc: string; team2_desc: string }, key: 'team1' | 't
         <button class="reset" :class="{ on: editing }" @click="editing = !editing">
           {{ editing ? '▲ Hide editor' : '▼ Edit groups & thirds' }}
         </button>
+        <button class="reset" @click="tweak">🔀 Tweak</button>
+        <button class="reset" @click="randomize">🎲 Random</button>
         <button class="reset" @click="makeShareLink">🔗 Share</button>
+        <button class="reset" @click="generateImage">🖼 Image</button>
         <button class="reset" @click="seed">↺ Reset</button>
       </div>
 
@@ -297,6 +518,7 @@ function descOf(m: { team1_desc: string; team2_desc: string }, key: 'team1' | 't
         <input class="shareinput" type="text" :value="shareUrl" readonly @focus="($event.target as HTMLInputElement).select()" />
         <span class="sharemsg">{{ copied ? '✓ Copied to clipboard' : 'Copy this link to share your prediction' }}</span>
       </div>
+      <p v-if="imageError" class="status error">{{ imageError }}</p>
 
       <!-- ===================== GROUP STAGE ===================== -->
       <template v-if="editing">
