@@ -222,12 +222,15 @@ async function generateImage() {
   const bracket = data.value.bracket
   const byNo = new Map(bracket.map((m) => [m.match_no, m]))
 
-  const M = { top: 56, left: 14, right: 168, bottom: 40 }
-  const COLW = 88
-  const ROW = 46
+  const M = { top: 70, left: 16, right: 196, bottom: 52 }
+  const COLW = 96
+  const ROW = 66
   const FW = 34
   const FH = 22
-  const CW = FW + 12
+  const GAP = 6 // between the two flags in a match
+  const PAD = 6 // card inner padding
+  const CW = FW + PAD * 2 // card width
+  const CH = FH * 2 + GAP + PAD * 2 // card height
   const cols = COLUMN_ROUNDS
   const colIndex = (r: string) => {
     const i = cols.indexOf(r)
@@ -239,6 +242,7 @@ async function generateImage() {
   const W = M.left + cols.length * COLW + M.right
   const H = M.top + plotH + M.bottom
   const champ = res.get(lay.root)?.winner ?? null
+  const thirdPlaceNo = bracket.find((b) => b.feeds_into == null && b.match_no !== lay.root)?.match_no
 
   // preload the flags we'll draw (CORS so the canvas isn't tainted)
   const need = new Set<string>()
@@ -273,22 +277,28 @@ async function generateImage() {
   ctx.fillStyle = '#fff'
   ctx.fillRect(0, 0, W, H)
 
+  const rrect = (x: number, y: number, w: number, h: number, r: number) => {
+    ctx.beginPath()
+    if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, w, h, r)
+    else ctx.rect(x, y, w, h)
+  }
+
   ctx.textBaseline = 'alphabetic'
   ctx.textAlign = 'left'
   ctx.fillStyle = '#111827'
-  ctx.font = '700 16px system-ui, sans-serif'
-  ctx.fillText('World Cup 2026 — Predicted Bracket', M.left, 24)
+  ctx.font = '700 18px system-ui, sans-serif'
+  ctx.fillText('World Cup 2026 — Predicted Bracket', M.left, 28)
   ctx.fillStyle = '#6b7280'
-  ctx.font = '12px system-ui, sans-serif'
-  ctx.fillText(`Seeded by ${BASIS_LABEL[basis.value]}`, M.left, 42)
+  ctx.font = '13px system-ui, sans-serif'
+  ctx.fillText(`Seeded by ${BASIS_LABEL[basis.value]}`, M.left, 48)
 
   ctx.fillStyle = '#9ca3af'
-  ctx.font = '700 9px system-ui, sans-serif'
-  cols.forEach((r, ri) => ctx.fillText(r.toUpperCase(), cardX(ri), M.top - 8))
+  ctx.font = '700 10px system-ui, sans-serif'
+  cols.forEach((r, ri) => ctx.fillText(r.toUpperCase(), cardX(ri), M.top - 12))
 
-  // connectors
-  ctx.strokeStyle = '#d1d5db'
-  ctx.lineWidth = 1
+  // connectors (drawn first, under the cards)
+  ctx.strokeStyle = '#cbd5e1'
+  ctx.lineWidth = 1.5
   for (const m of bracket) {
     if (m.feeds_into == null || !byNo.has(m.feeds_into)) continue
     const x1 = cardX(colIndex(m.round)) + CW
@@ -304,49 +314,77 @@ async function generateImage() {
     ctx.stroke()
   }
 
-  const drawFlag = (t: string | null, x: number, y: number, win: boolean) => {
+  const drawSlot = (t: string | null, fx: number, y: number, win: boolean) => {
     if (win) {
       ctx.fillStyle = '#dcfce7'
       ctx.strokeStyle = '#16a34a'
       ctx.lineWidth = 1.5
-      ctx.fillRect(x - 1, y - 2, CW, FH + 4)
-      ctx.strokeRect(x - 1, y - 2, CW, FH + 4)
+      rrect(fx - 4, y - 3, FW + 8, FH + 6, 4)
+      ctx.fill()
+      ctx.stroke()
     }
-    ctx.globalAlpha = t && !win ? 0.5 : 1
-    const fx = x + (CW - FW) / 2
+    ctx.globalAlpha = t && !win ? 0.45 : 1
     const im = t ? imgs.get(t) : null
     if (im) ctx.drawImage(im, fx, y, FW, FH)
     else {
-      ctx.fillStyle = '#e5e7eb'
+      ctx.fillStyle = '#eef2f7'
       ctx.fillRect(fx, y, FW, FH)
     }
+    ctx.strokeStyle = win ? '#16a34a' : '#d1d5db'
+    ctx.lineWidth = 1
+    ctx.strokeRect(fx, y, FW, FH)
     ctx.globalAlpha = 1
   }
 
-  for (const m of bracket) {
-    if (m.match_no === lay.root) continue // final drawn as champion block too
-    const r = res.get(m.match_no)
-    const x = cardX(colIndex(m.round))
-    const yc = cardYc(m.match_no)
-    drawFlag(r?.team1 ?? null, x, yc - FH - 3, !!r?.winner && r?.team1 === r?.winner)
-    drawFlag(r?.team2 ?? null, x, yc + 3, !!r?.winner && r?.team2 === r?.winner)
+  const drawMatch = (no: number, x: number, yc: number) => {
+    const r = res.get(no)
+    // card
+    ctx.fillStyle = '#fff'
+    ctx.strokeStyle = '#e5e7eb'
+    ctx.lineWidth = 1
+    rrect(x, yc - CH / 2, CW, CH, 7)
+    ctx.fill()
+    ctx.stroke()
+    const fx = x + (CW - FW) / 2
+    const y1 = yc - CH / 2 + PAD
+    drawSlot(r?.team1 ?? null, fx, y1, !!r?.winner && r?.team1 === r?.winner)
+    drawSlot(r?.team2 ?? null, fx, y1 + FH + GAP, !!r?.winner && r?.team2 === r?.winner)
   }
-  // final + champion block on the right
+
+  for (const m of bracket) {
+    if (m.match_no === thirdPlaceNo) continue // drawn separately below the champion
+    drawMatch(m.match_no, cardX(colIndex(m.round)), cardYc(m.match_no))
+  }
+
+  // champion callout to the right of the (centered) final
   {
-    const r = res.get(lay.root)
     const x = cardX(cols.length - 1)
     const yc = cardYc(lay.root)
-    drawFlag(r?.team1 ?? null, x, yc - FH - 3, !!r?.winner && r?.team1 === r?.winner)
-    drawFlag(r?.team2 ?? null, x, yc + 3, !!r?.winner && r?.team2 === r?.winner)
-    const cx = x + CW + 22
+    const cx = x + CW + 26
     ctx.fillStyle = '#b45309'
-    ctx.font = '700 10px system-ui, sans-serif'
+    ctx.font = '700 11px system-ui, sans-serif'
     ctx.fillText('CHAMPION', cx, yc - FH)
     const cim = champ ? imgs.get(champ) : null
-    if (cim) ctx.drawImage(cim, cx, yc - FH + 6, FW * 1.6, FH * 1.6)
+    const bw = FW * 1.7
+    const bh = FH * 1.7
+    if (cim) {
+      ctx.drawImage(cim, cx, yc - FH + 8, bw, bh)
+      ctx.strokeStyle = '#fcd34d'
+      ctx.lineWidth = 2
+      ctx.strokeRect(cx, yc - FH + 8, bw, bh)
+    }
     ctx.fillStyle = '#111827'
-    ctx.font = '700 14px system-ui, sans-serif'
-    ctx.fillText(champ ?? '—', cx + (cim ? FW * 1.6 + 8 : 0), yc + 6)
+    ctx.font = '700 16px system-ui, sans-serif'
+    ctx.fillText(champ ?? '—', cx + (cim ? bw + 10 : 0), yc + 8)
+
+    // third-place playoff block under the champion
+    if (thirdPlaceNo != null) {
+      const ty = yc + CH + 70
+      ctx.fillStyle = '#6b7280'
+      ctx.font = '700 10px system-ui, sans-serif'
+      ctx.fillText('THIRD PLACE', x, ty - CH / 2 - 8)
+      drawMatch(thirdPlaceNo, x, ty)
+    }
   }
 
   try {
