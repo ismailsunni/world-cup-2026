@@ -11,7 +11,7 @@ export const router = createRouter({
     { path: '/scatter', name: 'scatter', component: () => import('./views/ScatterView.vue') },
     { path: '/numbers', name: 'numbers', component: () => import('./views/NumbersView.vue') },
     { path: '/bracket', name: 'bracket', component: () => import('./views/BracketView.vue') },
-    { path: '/eighth', name: 'eighth', component: () => import('./views/HistoryView.vue') },
+    { path: '/history', name: 'history', component: () => import('./views/HistoryView.vue') },
     { path: '/teams', name: 'teams', component: () => import('./views/TeamsView.vue') },
     { path: '/players', name: 'players', component: () => import('./views/PlayersView.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/' },

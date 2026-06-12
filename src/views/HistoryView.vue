@@ -7,12 +7,12 @@ import { flagUrl } from '../flags'
 const { data, error, loading } = useHistory()
 const { data: wc } = useData()
 
-// How far each result is + how it's shown.
-const META: Record<HistoryResult, { label: string; full: string; weight: number }> = {
-  W: { label: 'W', full: 'Champion', weight: 4 },
-  RU: { label: 'RU', full: 'Runner-up', weight: 3 },
-  SF: { label: 'SF', full: 'Semi-final', weight: 2 },
-  QF: { label: 'QF', full: 'Quarter-final', weight: 1 },
+// Points per finishing depth (and how each result is shown).
+const META: Record<HistoryResult, { label: string; full: string; points: number }> = {
+  W: { label: 'W', full: 'Champion', points: 8 },
+  RU: { label: 'RU', full: 'Runner-up', points: 4 },
+  SF: { label: 'SF', full: 'Semi-final', points: 2 },
+  QF: { label: 'QF', full: 'Quarter-final', points: 1 },
 }
 const ORDER: HistoryResult[] = ['W', 'RU', 'SF', 'QF']
 
@@ -28,7 +28,7 @@ const years = computed(() =>
 interface Row {
   country: string
   byYear: Record<number, HistoryResult>
-  weight: number
+  points: number
   apps: number
   titles: number
   best: HistoryResult
@@ -44,7 +44,7 @@ const rows = computed<Row[]>(() => {
       row = {
         country: r.country,
         byYear: {},
-        weight: 0,
+        points: 0,
         apps: 0,
         titles: 0,
         best: 'QF',
@@ -53,39 +53,63 @@ const rows = computed<Row[]>(() => {
       map.set(r.country, row)
     }
     row.byYear[r.year] = r.result
-    row.weight += META[r.result].weight
+    row.points += META[r.result].points
     row.apps += 1
     if (r.result === 'W') row.titles += 1
-    if (META[r.result].weight > META[row.best].weight) row.best = r.result
+    if (META[r.result].points > META[row.best].points) row.best = r.result
   }
   const out = [...map.values()]
   for (const r of out) r.inWC2026 = wc2026.value.has(r.country)
-  return out
-    .filter((r) => !onlyWC2026.value || r.inWC2026)
-    .sort(
-      (a, b) =>
-        b.weight - a.weight ||
-        b.titles - a.titles ||
-        b.apps - a.apps ||
-        a.country.localeCompare(b.country),
-    )
+  return out.filter((r) => !onlyWC2026.value || r.inWC2026)
 })
+
+// --- sorting -----------------------------------------------------------------
+const sortKey = ref<string>('points') // 'country' | 'points' | 'apps' | '<year>'
+const sortDir = ref<'asc' | 'desc'>('desc')
+
+function sortVal(r: Row, key: string): number | string {
+  if (key === 'country') return r.country
+  if (key === 'points') return r.points
+  if (key === 'apps') return r.apps
+  const res = r.byYear[Number(key)] // year column: rank by depth, missing last
+  return res ? META[res].points : -1
+}
+function toggleSort(key: string) {
+  if (sortKey.value === key) sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  else {
+    sortKey.value = key
+    sortDir.value = key === 'country' ? 'asc' : 'desc'
+  }
+}
+const view = computed(() => {
+  const dir = sortDir.value === 'asc' ? 1 : -1
+  const key = sortKey.value
+  return [...rows.value].sort((a, b) => {
+    const av = sortVal(a, key)
+    const bv = sortVal(b, key)
+    const cmp =
+      typeof av === 'string' ? av.localeCompare(bv as string) : (av as number) - (bv as number)
+    return cmp * dir || a.country.localeCompare(b.country)
+  })
+})
+const arrow = (key: string) => (sortKey.value === key ? (sortDir.value === 'asc' ? '▲' : '▼') : '')
 </script>
 
 <template>
   <div class="page">
-    <h2>1/8 Final</h2>
+    <h2>Historical QF</h2>
     <p class="sub">
       How nations have fared deep in the World Cup knockout stage — every team to reach the
-      <strong>quarter-final or further</strong>, from 1998 to 2022. Cells get darker the further
-      a team went; gold marks the champions.
+      <strong>quarter-final or further</strong>, from 1998 to 2022. Cells darken with depth; gold
+      marks the champions. <strong>Points</strong>: W = 8, RU = 4, SF = 2, QF = 1. Click a column
+      header to sort.
     </p>
 
     <div class="controls">
       <ul class="legend" aria-label="Result key">
         <li v-for="r in ORDER" :key="r">
           <span class="chip" :class="'res-' + r">{{ META[r].label }}</span>
-          {{ META[r].full }}
+          {{ META[r].full }} ({{ META[r].points }})
         </li>
       </ul>
       <label class="toggle">
@@ -100,13 +124,28 @@ const rows = computed<Row[]>(() => {
       <table>
         <thead>
           <tr>
-            <th class="cty">Country</th>
-            <th v-for="y in years" :key="y" class="yr">{{ y }}</th>
-            <th class="num">Apps</th>
+            <th class="cty sortable" :class="{ sorted: sortKey === 'country' }" @click="toggleSort('country')">
+              Country <span class="arr">{{ arrow('country') }}</span>
+            </th>
+            <th
+              v-for="y in years"
+              :key="y"
+              class="yr sortable"
+              :class="{ sorted: sortKey === String(y) }"
+              @click="toggleSort(String(y))"
+            >
+              {{ y }} <span class="arr">{{ arrow(String(y)) }}</span>
+            </th>
+            <th class="num sortable" :class="{ sorted: sortKey === 'points' }" @click="toggleSort('points')">
+              Pts <span class="arr">{{ arrow('points') }}</span>
+            </th>
+            <th class="num sortable" :class="{ sorted: sortKey === 'apps' }" @click="toggleSort('apps')">
+              Apps <span class="arr">{{ arrow('apps') }}</span>
+            </th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="r in rows" :key="r.country" :class="{ wc: r.inWC2026 }">
+          <tr v-for="r in view" :key="r.country" :class="{ wc: r.inWC2026 }">
             <td class="cty">
               <img v-if="flagUrl(r.country)" class="flag" :src="flagUrl(r.country)!" :alt="r.country" />
               <span class="name">{{ r.country }}</span>
@@ -124,10 +163,11 @@ const rows = computed<Row[]>(() => {
                 {{ META[r.byYear[y]].label }}
               </span>
             </td>
+            <td class="num pts">{{ r.points }}</td>
             <td class="num">{{ r.apps }}</td>
           </tr>
-          <tr v-if="!rows.length">
-            <td :colspan="years.length + 2" class="empty">No teams match.</td>
+          <tr v-if="!view.length">
+            <td :colspan="years.length + 3" class="empty">No teams match.</td>
           </tr>
         </tbody>
       </table>
@@ -147,7 +187,7 @@ h2 {
 .sub {
   margin: 0 0 1rem;
   color: #6b7280;
-  max-width: 70ch;
+  max-width: 72ch;
 }
 .controls {
   display: flex;
@@ -205,6 +245,19 @@ thead th {
 th.cty {
   text-align: left;
 }
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+th.sortable:hover {
+  color: #111827;
+}
+th.sorted {
+  color: #2563eb;
+}
+.arr {
+  font-size: 0.6rem;
+}
 td {
   padding: 0.3rem 0.4rem;
   border-bottom: 1px solid #f1f5f9;
@@ -239,6 +292,10 @@ th.num {
   text-align: center;
   font-variant-numeric: tabular-nums;
   color: #6b7280;
+}
+td.pts {
+  font-weight: 700;
+  color: #111827;
 }
 tbody tr.wc {
   background: #fffdf5;

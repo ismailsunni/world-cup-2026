@@ -11,7 +11,7 @@
         <router-link to="/scatter">Player Chart</router-link>
         <router-link to="/numbers">Squad Numbers</router-link>
         <router-link to="/bracket">Bracket</router-link>
-        <router-link to="/eighth">1/8 Final</router-link>
+        <router-link to="/history">Historical QF</router-link>
         <router-link to="/teams">Teams</router-link>
         <router-link to="/players">Players</router-link>
       </nav>
