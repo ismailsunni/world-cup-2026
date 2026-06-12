@@ -42,6 +42,28 @@ export interface Venue {
   final: boolean
 }
 
+export interface ScheduleMatch {
+  match_no: number
+  round: string
+  group?: string
+  date: string
+  time_utc: string
+  home?: string
+  away?: string
+  venue_id: string
+  venue?: string
+}
+
+export interface BracketMatch {
+  match_no: number
+  round: string
+  date: string
+  team1_desc: string
+  team2_desc: string
+  feeds_into: number | null
+  venue_id: string
+}
+
 export interface WorldCup {
   metadata: {
     tournament: string
@@ -54,6 +76,6 @@ export interface WorldCup {
   }
   venues: Venue[]
   groups: Group[]
-  schedule: unknown[]
-  bracket: unknown[]
+  schedule: ScheduleMatch[]
+  bracket: BracketMatch[]
 }
