@@ -124,6 +124,7 @@ const arrow = (key: string) => (sortKey.value === key ? (sortDir.value === 'asc'
       <table>
         <thead>
           <tr>
+            <th class="rank">#</th>
             <th class="cty sortable" :class="{ sorted: sortKey === 'country' }" @click="toggleSort('country')">
               Country <span class="arr">{{ arrow('country') }}</span>
             </th>
@@ -145,7 +146,8 @@ const arrow = (key: string) => (sortKey.value === key ? (sortDir.value === 'asc'
           </tr>
         </thead>
         <tbody>
-          <tr v-for="r in view" :key="r.country" :class="{ wc: r.inWC2026 }">
+          <tr v-for="(r, i) in view" :key="r.country" :class="{ wc: r.inWC2026 }">
+            <td class="rank">{{ i + 1 }}</td>
             <td class="cty">
               <img v-if="flagUrl(r.country)" class="flag" :src="flagUrl(r.country)!" :alt="r.country" />
               <span class="name">{{ r.country }}</span>
@@ -167,7 +169,7 @@ const arrow = (key: string) => (sortKey.value === key ? (sortDir.value === 'asc'
             <td class="num">{{ r.apps }}</td>
           </tr>
           <tr v-if="!view.length">
-            <td :colspan="years.length + 3" class="empty">No teams match.</td>
+            <td :colspan="years.length + 4" class="empty">No teams match.</td>
           </tr>
         </tbody>
       </table>
@@ -244,6 +246,13 @@ thead th {
 }
 th.cty {
   text-align: left;
+}
+.rank {
+  text-align: right;
+  width: 2rem;
+  color: #9ca3af;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
 }
 th.sortable {
   cursor: pointer;
