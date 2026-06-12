@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useData } from '../composables/useData'
 import type { Team } from '../types'
 import { flagUrl } from '../flags'
@@ -9,8 +10,10 @@ import {
   parseThirdSlots,
   resolveBracket,
 } from '../simulate'
+import { decodeShare, encodeShare } from '../share'
 
 const { data, error, loading } = useData()
+const route = useRoute()
 
 // --- strength lookup ---------------------------------------------------------
 const teamByName = computed(() => {
@@ -37,6 +40,7 @@ const seedVal = (name: string) => {
 }
 
 // --- editable prediction state ----------------------------------------------
+const QUALIFYING_THIRDS = 8
 const order = ref<Record<string, string[]>>({}) // group → team names, finish order
 const thirdsRank = ref<string[]>([]) // group letters, best-third order (top 8 qualify)
 const picks = ref<Record<number, string | null>>({}) // match → chosen winner
@@ -55,15 +59,91 @@ function seed() {
     .sort((a, b) => strengthOf(ord[b][2]) - strengthOf(ord[a][2]))
   picks.value = {}
 }
-// Seed on load and re-seed whenever the strength basis changes.
-watch([data, basis], seed, { immediate: true })
+
+// Rebuild the prediction from a shared code (?p=...). Returns false if invalid.
+let applying = false
+function applyShare(code: string): boolean {
+  if (!data.value) return false
+  const nos = data.value.bracket.map((m) => m.match_no)
+  const dec = decodeShare(code, data.value.groups, nos)
+  if (!dec) return false
+  applying = true
+  basis.value = dec.basis
+  order.value = dec.order
+  thirdsRank.value = dec.thirdsRank
+  // Rebuild picks from the encoded winner-sides.
+  const r1 = Object.fromEntries(Object.entries(dec.order).map(([g, ts]) => [g, ts[0]]))
+  const r2 = Object.fromEntries(Object.entries(dec.order).map(([g, ts]) => [g, ts[1]]))
+  const qual = dec.thirdsRank.slice(0, QUALIFYING_THIRDS)
+  const tbg = Object.fromEntries(qual.map((g) => [g, dec.order[g][2]]))
+  const alloc = allocateThirds(parseThirdSlots(data.value.bracket), qual)
+  const res = resolveBracket({
+    bracket: data.value.bracket,
+    rank1: r1,
+    rank2: r2,
+    thirdByGroup: tbg,
+    thirdAlloc: alloc,
+    picks: {},
+    strength: () => 0,
+    decide: (t1, t2, no) => (dec.sides[no] === 1 ? t2 : t1),
+  })
+  const np: Record<number, string | null> = {}
+  res.forEach((r, no) => {
+    if (r.winner) np[no] = r.winner
+  })
+  picks.value = np
+  applying = false
+  return true
+}
+
+// On data load: apply a shared code if present, otherwise seed from Elo.
+const pendingCode = typeof route.query.p === 'string' ? route.query.p : null
+watch(
+  data,
+  () => {
+    if (!data.value) return
+    if (pendingCode && applyShare(pendingCode)) return
+    seed()
+  },
+  { immediate: true },
+)
+// User-driven basis change re-seeds (ignored while applying a shared code).
+watch(basis, () => {
+  if (!applying) seed()
+})
 
 // Group-stage + thirds editor is collapsed by default so the bracket leads.
 const editing = ref(false)
 
-// --- derived standings -------------------------------------------------------
-const QUALIFYING_THIRDS = 8
+// --- share link --------------------------------------------------------------
+const shareUrl = ref('')
+const copied = ref(false)
+function makeShareLink() {
+  if (!data.value || !geometry.value) return
+  const nos = data.value.bracket.map((m) => m.match_no)
+  const sides: Record<number, 0 | 1> = {}
+  for (const no of nos) {
+    const r = resolved.value.get(no)
+    sides[no] = r && r.winner && r.team2 && r.winner === r.team2 ? 1 : 0
+  }
+  const code = encodeShare(
+    { basis: basis.value, order: order.value, thirdsRank: thirdsRank.value, sides },
+    data.value.groups,
+    nos,
+  )
+  const url = `${location.origin}${location.pathname}#/bracket?p=${code}`
+  shareUrl.value = url
+  copied.value = false
+  navigator.clipboard?.writeText(url).then(
+    () => {
+      copied.value = true
+      setTimeout(() => (copied.value = false), 2000)
+    },
+    () => {},
+  )
+}
 
+// --- derived standings -------------------------------------------------------
 const rank1 = computed(() =>
   Object.fromEntries(Object.entries(order.value).map(([g, ts]) => [g, ts[0]])),
 )
@@ -209,7 +289,13 @@ function descOf(m: { team1_desc: string; team2_desc: string }, key: 'team1' | 't
         <button class="reset" :class="{ on: editing }" @click="editing = !editing">
           {{ editing ? '▲ Hide editor' : '▼ Edit groups & thirds' }}
         </button>
+        <button class="reset" @click="makeShareLink">🔗 Share</button>
         <button class="reset" @click="seed">↺ Reset</button>
+      </div>
+
+      <div v-if="shareUrl" class="sharebox">
+        <input class="shareinput" type="text" :value="shareUrl" readonly @focus="($event.target as HTMLInputElement).select()" />
+        <span class="sharemsg">{{ copied ? '✓ Copied to clipboard' : 'Copy this link to share your prediction' }}</span>
       </div>
 
       <!-- ===================== GROUP STAGE ===================== -->
@@ -436,6 +522,29 @@ h2 {
 .reset.on {
   border-color: #2563eb;
   color: #2563eb;
+}
+.sharebox {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin: -0.5rem 0 1rem;
+}
+.shareinput {
+  flex: 1;
+  min-width: 240px;
+  max-width: 560px;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  color: #374151;
+  background: #f9fafb;
+}
+.sharemsg {
+  font-size: 0.78rem;
+  color: #16a34a;
+  font-weight: 600;
 }
 .section {
   margin: 1.5rem 0 0.75rem;

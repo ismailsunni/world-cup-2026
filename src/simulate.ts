@@ -83,6 +83,9 @@ export interface ResolveOpts {
   picks: Record<number, string | null>
   /** Higher = stronger; decides the default winner when unset. */
   strength: (team: string) => number
+  /** When set, fully decides each winner (ignores picks/strength) — used to
+   * rebuild a bracket from a shared winner-side encoding. */
+  decide?: (team1: string, team2: string, matchNo: number) => string
 }
 
 /**
@@ -91,7 +94,7 @@ export interface ResolveOpts {
  * is a valid topological order (feeders always have lower numbers).
  */
 export function resolveBracket(opts: ResolveOpts): Map<number, ResolvedMatch> {
-  const { bracket, rank1, rank2, thirdByGroup, thirdAlloc, picks, strength } = opts
+  const { bracket, rank1, rank2, thirdByGroup, thirdAlloc, picks, strength, decide } = opts
   const resolved = new Map<number, ResolvedMatch>()
   const byNo = new Map(bracket.map((m) => [m.match_no, m]))
 
@@ -119,9 +122,12 @@ export function resolveBracket(opts: ResolveOpts): Map<number, ResolvedMatch> {
     let winner: string | null = null
     let loser: string | null = null
     if (team1 && team2) {
-      const pick = picks[matchNo]
-      if (pick === team1 || pick === team2) winner = pick
-      else winner = strength(team1) >= strength(team2) ? team1 : team2
+      if (decide) winner = decide(team1, team2, matchNo)
+      else {
+        const pick = picks[matchNo]
+        if (pick === team1 || pick === team2) winner = pick
+        else winner = strength(team1) >= strength(team2) ? team1 : team2
+      }
       loser = winner === team1 ? team2 : team1
     } else if (team1 && !team2) {
       winner = team1
