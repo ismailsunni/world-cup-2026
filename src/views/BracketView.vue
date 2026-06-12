@@ -588,6 +588,14 @@ function moveTeam(group: string, i: number, dir: -1 | 1) {
 function moveThird(i: number, dir: -1 | 1) {
   thirdsRank.value = reorder(thirdsRank.value, i, dir)
 }
+// Re-sort only the thirds list by the active basis (3rd-placed team's strength),
+// leaving group orders and knockout picks untouched.
+function resetThirds() {
+  if (!data.value) return
+  thirdsRank.value = data.value.groups
+    .map((g) => g.group)
+    .sort((a, b) => strengthOf(order.value[b][2]) - strengthOf(order.value[a][2]))
+}
 
 // --- drag & drop reordering (group lists + the thirds list) ------------------
 type DragKind = 'group' | 'thirds'
@@ -757,9 +765,12 @@ function slotOrigin(matchNo: number, key: 'team1' | 'team2'): string {
       </div>
 
       <!-- ===================== BEST THIRDS ===================== -->
-      <h3 class="section">
-        Best third-placed teams — top {{ QUALIFYING_THIRDS }} of {{ thirdsList.length }} advance
-      </h3>
+      <div class="subhead">
+        <h3>
+          Best third-placed teams — top {{ QUALIFYING_THIRDS }} of {{ thirdsList.length }} advance
+        </h3>
+        <button class="reset reset-sm" @click="resetThirds">↺ Reset order</button>
+      </div>
       <ol class="thirds">
         <li
           v-for="(t, i) in thirdsList"
@@ -1117,6 +1128,21 @@ h2 {
 .section {
   margin: 1.5rem 0 0.75rem;
   font-size: 1.1rem;
+}
+.subhead {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 1.5rem 0 0.75rem;
+}
+.subhead h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.reset-sm {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.78rem;
 }
 .hint {
   margin: -0.4rem 0 0.6rem;
