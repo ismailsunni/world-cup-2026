@@ -491,6 +491,87 @@ const champion = computed(() =>
   geometry.value ? (resolved.value.get(geometry.value.finalNo)?.winner ?? null) : null,
 )
 
+// --- bracket analysis (the 4 teams feeding each Round-of-16 match) ----------
+// A "bracket" = two R32 ties → one R16 match; its winner reaches the QF.
+const analysisOpen = ref(false)
+
+interface BracketStat {
+  r16: number
+  feeders: number[]
+  teams: { name: string; s: number }[] // sorted strongest → weakest
+  total: number
+  stdev: number
+  favorite: string | null
+  edge: number // favorite strength − average of the other three (how much it outclasses the field)
+  complete: boolean
+}
+
+const bracketAnalysis = computed(() => {
+  if (!data.value) return null
+  const all = data.value.bracket
+  const r16 = all.filter((b) => b.round === 'Round of 16')
+
+  const brackets: BracketStat[] = r16.map((m) => {
+    const feeders = all.filter((b) => b.feeds_into === m.match_no)
+    const names: string[] = []
+    for (const f of feeders) {
+      const r = resolved.value.get(f.match_no)
+      if (r?.team1) names.push(r.team1)
+      if (r?.team2) names.push(r.team2)
+    }
+    const teams = names.map((n) => ({ name: n, s: strengthOf(n) })).sort((a, b) => b.s - a.s)
+    const vals = teams.map((t) => t.s)
+    const total = vals.reduce((a, b) => a + b, 0)
+    const mean = vals.length ? total / vals.length : 0
+    const stdev = vals.length
+      ? Math.sqrt(vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length)
+      : 0
+    // How much the favourite outclasses the rest, in absolute strength.
+    const edge =
+      vals.length >= 2 ? vals[0] - vals.slice(1).reduce((a, b) => a + b, 0) / (vals.length - 1) : 0
+    return {
+      r16: m.match_no,
+      feeders: feeders.map((f) => f.match_no),
+      teams,
+      total,
+      stdev,
+      favorite: teams[0]?.name ?? null,
+      edge,
+      complete: names.length === 4,
+    }
+  })
+
+  const done = brackets.filter((b) => b.complete)
+  const pick = (sel: (b: BracketStat) => number, dir: 'min' | 'max') =>
+    done.length
+      ? done.reduce((best, b) =>
+          (dir === 'min' ? sel(b) < sel(best) : sel(b) > sel(best)) ? b : best,
+        )
+      : null
+  const weakest = pick((b) => b.total, 'min')
+  const competitive = pick((b) => b.stdev, 'min')
+  const easiest = pick((b) => b.edge, 'max')
+
+  // First-assigned category wins, so a bracket gets one colour (priority below).
+  const catByMatch: Record<number, string> = {}
+  const tag = (b: BracketStat | null, cat: string) => {
+    if (!b) return
+    for (const no of [b.r16, ...b.feeders]) if (!catByMatch[no]) catByMatch[no] = cat
+  }
+  tag(easiest, 'easy')
+  tag(competitive, 'comp')
+  tag(weakest, 'weak')
+
+  return { brackets, weakest, competitive, easiest, catByMatch }
+})
+
+// Category colour class for a knockout card (only while the analysis is open).
+function catClass(matchNo: number): string {
+  if (!analysisOpen.value || !bracketAnalysis.value) return ''
+  const c = bracketAnalysis.value.catByMatch[matchNo]
+  return c ? `cat-${c}` : ''
+}
+
 // --- interactions ------------------------------------------------------------
 function reorder(arr: string[], i: number, dir: -1 | 1): string[] {
   const j = i + dir
@@ -749,7 +830,7 @@ function slotOrigin(matchNo: number, key: 'team1' | 'team2'): string {
             v-for="c in geometry.cards"
             :key="c.m.match_no"
             class="match"
-            :class="{ third: c.isThird }"
+            :class="[{ third: c.isThird }, catClass(c.m.match_no)]"
             :style="{ left: c.x + 'px', top: c.top + 'px', width: CARD_W + 'px' }"
           >
             <span class="mno">{{ c.isThird ? '3rd place' : 'M' + c.m.match_no }}</span>
@@ -786,6 +867,93 @@ function slotOrigin(matchNo: number, key: 'team1' | 'team2'): string {
           </div>
         </div>
       </div>
+
+      <!-- ===================== BRACKET ANALYSIS ===================== -->
+      <div class="analysis-bar">
+        <button class="reset" :class="{ on: analysisOpen }" @click="analysisOpen = !analysisOpen">
+          {{ analysisOpen ? '▲ Hide bracket analysis' : '▼ Show bracket analysis' }}
+        </button>
+      </div>
+
+      <section v-if="analysisOpen && bracketAnalysis" class="analysis">
+        <p class="hint">
+          A “bracket” is the four teams in two Round-of-32 ties feeding one Round-of-16 match —
+          the winner reaches the quarter-final. Strength uses {{ BASIS_LABEL[basis] }}. Matching
+          colours are shown on the bracket above.
+        </p>
+
+        <div class="acards">
+          <div v-if="bracketAnalysis.easiest" class="acard">
+            <span class="atag easy">Easiest</span>
+            <div class="aflags">
+              <img
+                v-for="t in bracketAnalysis.easiest.teams"
+                :key="t.name"
+                class="flag"
+                :class="{ fav: t.name === bracketAnalysis.easiest.favorite }"
+                :src="flagUrl(t.name) || ''"
+                :alt="t.name"
+                :title="t.name"
+              />
+            </div>
+            <p>
+              <strong>{{ bracketAnalysis.easiest.favorite }}</strong> towers over the other
+              three — a clear run to the quarter-final.
+            </p>
+          </div>
+
+          <div v-if="bracketAnalysis.competitive" class="acard">
+            <span class="atag comp">Most competitive</span>
+            <div class="aflags">
+              <img
+                v-for="t in bracketAnalysis.competitive.teams"
+                :key="t.name"
+                class="flag"
+                :src="flagUrl(t.name) || ''"
+                :alt="t.name"
+                :title="t.name"
+              />
+            </div>
+            <p>Four closely-matched sides — no clear favourite for the quarter-final spot.</p>
+          </div>
+
+          <div v-if="bracketAnalysis.weakest" class="acard">
+            <span class="atag weak">Weakest</span>
+            <div class="aflags">
+              <img
+                v-for="t in bracketAnalysis.weakest.teams"
+                :key="t.name"
+                class="flag"
+                :src="flagUrl(t.name) || ''"
+                :alt="t.name"
+                :title="t.name"
+              />
+            </div>
+            <p>Lowest combined strength — the most winnable path to the quarter-final.</p>
+          </div>
+        </div>
+
+        <ul class="alist">
+          <li v-for="b in bracketAnalysis.brackets" :key="b.r16">
+            <span
+              class="cdot"
+              :class="bracketAnalysis.catByMatch[b.r16] ? 'cat-' + bracketAnalysis.catByMatch[b.r16] : ''"
+            />
+            <span class="aflags sm">
+              <img
+                v-for="t in b.teams"
+                :key="t.name"
+                class="flag"
+                :class="{ fav: t.name === b.favorite }"
+                :src="flagUrl(t.name) || ''"
+                :alt="t.name"
+                :title="`${t.name} · ${seedVal(t.name)}`"
+              />
+            </span>
+            <span class="afav">→ {{ b.favorite }}</span>
+          </li>
+        </ul>
+      </section>
     </template>
   </div>
 </template>
@@ -1148,6 +1316,15 @@ h2 {
 .match.third {
   border-style: dashed;
 }
+.match.cat-easy {
+  border-left: 4px solid #f59e0b;
+}
+.match.cat-comp {
+  border-left: 4px solid #2563eb;
+}
+.match.cat-weak {
+  border-left: 4px solid #64748b;
+}
 .mno {
   display: block;
   font-size: 0.6rem;
@@ -1213,6 +1390,110 @@ h2 {
   min-width: 0;
   color: #9ca3af;
   font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* bracket analysis */
+.analysis-bar {
+  margin: 1rem 0 0;
+}
+.analysis {
+  margin-top: 0.75rem;
+}
+.acards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.acard {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.8rem 0.9rem;
+}
+.acard p {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: #374151;
+  line-height: 1.35;
+}
+.atag {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  color: #fff;
+}
+.atag.easy {
+  background: #f59e0b;
+}
+.atag.comp {
+  background: #2563eb;
+}
+.atag.weak {
+  background: #64748b;
+}
+.aflags {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+  flex-wrap: wrap;
+}
+.aflags.sm {
+  margin-top: 0;
+}
+.aflags .flag {
+  width: 30px;
+  height: auto;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+.aflags.sm .flag {
+  width: 24px;
+}
+.aflags .flag.fav {
+  outline: 2px solid #f59e0b;
+  outline-offset: 1px;
+}
+.alist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.4rem 1rem;
+}
+.alist li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.cdot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #e5e7eb;
+}
+.cdot.cat-easy {
+  background: #f59e0b;
+}
+.cdot.cat-comp {
+  background: #2563eb;
+}
+.cdot.cat-weak {
+  background: #64748b;
+}
+.afav {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #374151;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
