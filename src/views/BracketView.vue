@@ -38,6 +38,7 @@ const seedVal = (name: string) => {
   if (basis.value === 'elo') return t.elo_rating != null ? String(t.elo_rating) : '—'
   return t.fifa_ranking != null ? `#${t.fifa_ranking}` : '—'
 }
+const potOf = (name: string) => teamByName.value.get(name)?.pot ?? null
 
 // --- editable prediction state ----------------------------------------------
 const QUALIFYING_THIRDS = 8
@@ -959,6 +960,11 @@ function slotOrigin(matchNo: number, key: 'team1' | 'team2'): string {
                   <span class="sname">{{
                     resolved.get(c.m.match_no)![key as 'team1' | 'team2']
                   }}</span>
+                  <span
+                    v-if="potOf(resolved.get(c.m.match_no)![key as 'team1' | 'team2']!)"
+                    class="pot"
+                    title="Seeding pot"
+                  >P{{ potOf(resolved.get(c.m.match_no)![key as 'team1' | 'team2']!) }}</span>
                 </template>
                 <span v-else class="sdesc">{{ descOf(c.m, key as 'team1' | 'team2') }}</span>
               </button>
@@ -1596,6 +1602,19 @@ h2 {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.slot .pot {
+  flex: none;
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 4px;
+  padding: 0.02rem 0.26rem;
+}
+.slot.win .pot {
+  background: #bbf7d0;
+  color: #166534;
 }
 .slot .sdesc {
   flex: 1;
